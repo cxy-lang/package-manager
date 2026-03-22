@@ -1,0 +1,5 @@
+import { hello } from "./src/hello.cxy"
+
+func main() {
+  println(hello("World"))
+}
