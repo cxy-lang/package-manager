@@ -102,7 +102,7 @@ func handlePackageRequest(name: String, res: &Response): !void {
     // Check cache first
     if (var cached = htmlCache.get(name)) {
         // Zero-copy: chunk references cached.__str() without copying
-        res.chunk(ResponseChunk.String(cached.__str()))
+        res.chunk(cached.__str())
         return
     }
     
@@ -112,13 +112,13 @@ func handlePackageRequest(name: String, res: &Response): !void {
     md.toHtml(&html, pkg.readme.__str())
     
     htmlCache.set(name, &&html)  // Cache owns the allocation
-    res.chunk(ResponseChunk.String(html.__str()))
+    res.chunk(html.__str())
 }
 ```
 
 **Performance characteristics:**
 - Zero-copy lexing reduces allocations during markdown parsing
-- Zero-copy chunking avoids copying cached HTML into response body
+- Zero-copy chunking: `__string` passed to `chunk()` is auto-wrapped in ResponseChunk union
 - LRU cache (1000 packages × ~50KB = ~50MB) handles traffic power-law distribution
 - Popular packages stay hot in cache; cold packages render on-demand
 - Cache invalidation on package publish (simple key eviction)
@@ -704,8 +704,8 @@ var htmlCache = LRUCache[String, String](maxSize: 1000)  // ~50MB for popular pa
 func handlePackagePage(name: String, res: &Response): !void {
     // Try cache first (zero-copy chunk for cache hits)
     if (var cached = htmlCache.get(name)) {
-        // ResponseChunk.String(__string) → zero-copy reference to cached HTML
-        res.chunk(ResponseChunk.String(cached.__str()))
+        // Cxy auto-wraps __string in ResponseChunk union
+        res.chunk(cached.__str())
         return
     }
     
@@ -720,13 +720,13 @@ func handlePackagePage(name: String, res: &Response): !void {
     htmlCache.set(name, &&html)
     
     // Stream to response (zero-copy chunk)
-    res.chunk(ResponseChunk.String(html.__str()))
+    res.chunk(html.__str())
 }
 ```
 
 **Zero-copy at two levels:**
 1. **Parsing:** Markdown lexer uses `__string` slices into source (no token allocations)
-2. **Caching:** `ResponseChunk.String(__string)` references cached content (no body copy)
+2. **Caching:** `chunk(__string)` references cached content (no body copy, auto-wrapped in ResponseChunk)
 
 **Cache characteristics:**
 - LRU eviction handles power-law traffic distribution (80% of requests hit 20% of packages)
@@ -840,7 +840,7 @@ The registry uses a two-level zero-copy caching strategy:
 
 1. **In-process LRU cache** for rendered HTML (1000 packages, ~50MB):
    - `LRUCache[String, String]` stores markdown→HTML conversions
-   - `ResponseChunk.String(__string)` enables zero-copy chunking to response
+   - `chunk(__string)` enables zero-copy chunking to response (auto-wrapped in ResponseChunk)
    - Invalidated on package publish via `htmlCache.remove(name)`
    - Handles power-law traffic distribution (80/20 rule)
 
