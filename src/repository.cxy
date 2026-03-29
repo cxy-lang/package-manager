@@ -1,0 +1,148 @@
+module package_manager_repository
+
+import { Vector } from "stdlib/vector.cxy"
+import {
+    Package,
+    Version,
+    Dependency,
+    PublishToken,
+    PackageSummary,
+    VersionSummary,
+    PackageDetails,
+    PackageSearchResult,
+    PublishRequest
+} from "./models.cxy"
+
+/// Abstract repository for package registry data operations.
+/// Subclasses implement storage backend (SQLite, PostgreSQL, etc).
+pub class PackageRepository {
+
+    // -----------------------------------------------------------------------
+    // Package operations
+    // -----------------------------------------------------------------------
+
+    /// Search for packages by name, description, or author.
+    /// Returns paginated results sorted by relevance or specified criteria.
+    virtual
+    func searchPackages(
+        query: __string,
+        limit: i32,
+        offset: i32,
+        sort: __string  // "relevance", "downloads", "updated", "name"
+    ): !PackageSearchResult
+
+    /// Get complete package details by name, including latest version and all versions.
+    virtual
+    func getPackage(name: __string): !Optional[PackageDetails]
+
+    /// Get package summary by name (lightweight, no README or versions).
+    virtual func getPackageSummary(name: __string): !Optional[PackageSummary]
+
+    /// Check if a package name exists in the registry.
+    /// Returns false on database error (treats error as "doesn't exist").
+    virtual func packageExists(name: __string): bool
+
+    /// Get all packages (for homepage/browse page).
+    virtual func listPackages(limit: i32, offset: i32, sort: __string): !PackageSearchResult
+
+    /// Get recently published packages (for homepage).
+    virtual func getRecentPackages(limit: i32): !Vector[PackageSummary]
+
+    /// Get most downloaded packages (for homepage).
+    virtual func getPopularPackages(limit: i32): !Vector[PackageSummary]
+
+    // -----------------------------------------------------------------------
+    // Version operations
+    // -----------------------------------------------------------------------
+
+    /// Get a specific version of a package by name and version string.
+    virtual func getVersion(packageName: __string, versionStr: __string): !Optional[Version]
+
+    /// List all versions for a package (sorted by publish date, newest first).
+    virtual func listVersions(packageName: __string): !Vector[VersionSummary]
+
+    /// Get the latest (non-yanked) version for a package.
+    virtual func getLatestVersion(packageName: __string): !Optional[Version]
+
+    // -----------------------------------------------------------------------
+    // Dependency operations
+    // -----------------------------------------------------------------------
+
+    /// Get all dependencies for a specific version.
+    virtual func getDependencies(versionId: i64): !Vector[Dependency]
+
+    /// Get dependencies for a specific package version by name and version string.
+    virtual func getDependenciesForVersion(
+        packageName: __string,
+        versionStr: __string
+    ): !Vector[Dependency]
+
+    // -----------------------------------------------------------------------
+    // Publishing operations
+    // -----------------------------------------------------------------------
+
+    /// Publish a new package or a new version of an existing package.
+    /// Returns the package_id of the created/updated package.
+    /// Validates that:
+    /// - Package name is unclaimed or owned by the same repository
+    /// - Version doesn't already exist
+    /// - Dependencies are valid
+    virtual func publishPackage(req: &PublishRequest): !i64
+
+    /// Mark a version as yanked (not available for new installs).
+    virtual func yankVersion(packageName: __string, versionStr: __string): !void
+
+    /// Unmark a version as yanked.
+    virtual func unyankVersion(packageName: __string, versionStr: __string): !void
+
+    // -----------------------------------------------------------------------
+    // Download tracking
+    // -----------------------------------------------------------------------
+
+    /// Record a download for a specific version.
+    /// Increments both version.downloads and package.total_downloads.
+    /// Fire-and-forget operation - errors are logged but not propagated.
+    virtual func recordDownload(packageName: __string, versionStr: __string): void
+
+    // -----------------------------------------------------------------------
+    // Authentication
+    // -----------------------------------------------------------------------
+
+    /// Validate a publish token by its SHA-256 hash.
+    /// Updates last_used timestamp if valid.
+    /// Returns true if the token exists and is valid.
+    /// Returns false on database error (fail closed - safer for auth).
+    virtual func validateToken(tokenHash: __string): bool
+
+    /// Create a new publish token (for admin operations).
+    virtual func createToken(tokenHash: __string, label: __string): !i64
+
+    // -----------------------------------------------------------------------
+    // Statistics
+    // -----------------------------------------------------------------------
+
+    /// Get total package count in the registry.
+    /// Returns 0 on database error (statistics are non-critical).
+    virtual func getTotalPackageCount(): i64
+
+    /// Get total download count across all packages.
+    /// Returns 0 on database error (statistics are non-critical).
+    virtual func getTotalDownloadCount(): i64
+
+    // -----------------------------------------------------------------------
+    // Lifecycle
+    // -----------------------------------------------------------------------
+
+    /// Initialize the repository (run migrations, create schema, etc.).
+    /// Safe to call multiple times (idempotent).
+    virtual func initialize(): !void
+
+    /// Bootstrap admin token on first run.
+    /// Checks if admin token exists, if not generates one and prints it.
+    /// Returns true if token was generated (first run), false if already existed.
+    virtual func bootstrapAdminToken(jwtSecret: __string): !bool
+
+    /// Close any open connections and clean up resources.
+    /// Best-effort cleanup - errors are logged but not propagated.
+    virtual func close(): void
+}

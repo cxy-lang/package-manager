@@ -1,0 +1,387 @@
+module package_manager_api_handlers
+
+import { Server, Request, Response, Status } from "stdlib/http.cxy"
+import { parse } from "stdlib/json.cxy"
+import { Vector } from "stdlib/vector.cxy"
+import { RepoProvider, AuthMiddleware } from "./middleware.cxy"
+import { generateToken } from "./admin.cxy"
+import { PublishRequest, VersionSummary } from "../models.cxy"
+import { PackageRepository } from "../repository.cxy"
+import "./response.cxy" as response
+
+/// Type alias for our configured server
+pub type Endpoint = Server[RepoProvider, AuthMiddleware]
+
+// ============================================================================
+// Route Registration Groups
+// ============================================================================
+
+/// Register health check endpoint
+pub func health(ep: &Endpoint): void {
+    var auth = ep.middleware[AuthMiddleware]()
+    auth.exempt(ep("GET /api/v1/health", (@unused req: &const Request, resp: &Response) => {
+        handleHealth(resp)
+    }))
+}
+
+/// Register package endpoints
+pub func packages(ep: &Endpoint): void {
+    var auth = ep.middleware[AuthMiddleware]()
+
+    // Search/list packages
+    auth.exempt(ep("GET /api/v1/packages", (req: &const Request, resp: &Response) => {
+        var ctx = ep.context[RepoProvider](req)
+        var query = req.qparam("q", "")
+        var limitStr = req.qparam("limit")
+        var offsetStr = req.qparam("offset")
+        var sortParam = req.qparam("sort", "relevance")
+
+        var limit = !!limitStr ? limitStr&.toi[i32]() : 20 as i32
+        var offset = !!offsetStr ? offsetStr&.toi[i32]() : 0 as i32
+
+        handleSearchPackages(resp, ctx.repo, query, limit, offset, sortParam)
+    }).setAttrs({ parseQueryParams: true }))
+
+    // Get package details
+    auth.exempt(ep("GET /api/v1/packages/{name}", (req: &const Request, resp: &Response) => {
+        var ctx = ep.context[RepoProvider](req)
+        var nameOpt = req.param("name")
+        if !nameOpt {
+            response.badRequest(resp, "Missing package name".S)
+            return
+        }
+        handleGetPackage(resp, ctx.repo, __copy!(*nameOpt))
+    }))
+
+    // List versions
+    auth.exempt(ep("GET /api/v1/packages/{name}/versions", (req: &const Request, resp: &Response) => {
+        var ctx = ep.context[RepoProvider](req)
+        var nameOpt = req.param("name")
+        if !nameOpt {
+            response.badRequest(resp, "Missing package name".S)
+            return
+        }
+        handleListVersions(resp, ctx.repo, __copy!(*nameOpt))
+    }))
+
+    // Get specific version
+    auth.exempt(ep("GET /api/v1/packages/{name}/{version}", (req: &const Request, resp: &Response) => {
+        var ctx = ep.context[RepoProvider](req)
+        var nameOpt = req.param("name")
+        var versionOpt = req.param("version")
+
+        if !nameOpt {
+            response.badRequest(resp, "Missing package name".S)
+            return
+        }
+        if !versionOpt {
+            response.badRequest(resp, "Missing version".S)
+            return
+        }
+
+        handleGetVersion(resp, ctx.repo, __copy!(*nameOpt), __copy!(*versionOpt))
+    }))
+
+    // Download tracking
+    auth.exempt(ep("POST /api/v1/packages/{name}/{version}/download", (req: &const Request, resp: &Response) => {
+        var ctx = ep.context[RepoProvider](req)
+        var nameOpt = req.param("name")
+        var versionOpt = req.param("version")
+
+        if !nameOpt || !versionOpt {
+            response.badRequest(resp, "Missing package name or version".S)
+            return
+        }
+
+        handleDownload(resp, ctx.repo, __copy!(*nameOpt), __copy!(*versionOpt))
+    }))
+
+    // Publish package
+    ep("POST /api/v1/packages", (req: &const Request, resp: &Response) => {
+        var ctx = ep.context[RepoProvider](req)
+        var request = parse[PublishRequest](req.body().__str()) catch {
+            response.badRequest(resp, f"Invalid JSON: {ex!.what()}")
+            return
+        }
+        handlePublishPackage(resp, ctx.repo, &ctx.registryUrl, &request)
+    })
+}
+
+/// Register admin endpoints
+pub func admin(ep: &Endpoint): void {
+    var auth = ep.middleware[AuthMiddleware]()
+
+    // Create token
+    auth.admin(ep("POST /api/v1/admin/tokens", (req: &const Request, resp: &Response) => {
+        var request = parse[CreateTokenRequest](req.body().__str()) catch {
+            response.badRequest(resp, f"Invalid JSON: {ex!.what()}")
+            return
+        }
+
+        if request.scope != "publish" && request.scope != "admin" {
+            response.badRequest(resp, "Invalid scope. Must be 'publish' or 'admin'".S)
+            return
+        }
+
+        var authMw = ep.middleware[AuthMiddleware]()
+        if authMw._jwtSecret == null {
+            response.internalError(resp, "JWT secret not configured".S)
+            return
+        }
+
+        handleCreateToken(resp, authMw._jwtSecret.__str(), &request)
+    }))
+
+    // Yank version
+    auth.admin(ep("POST /api/v1/admin/packages/{name}/{version}/yank", (req: &const Request, resp: &Response) => {
+        var ctx = ep.context[RepoProvider](req)
+        var repo = ctx.repo
+
+        var nameOpt = req.param("name")
+        var versionOpt = req.param("version")
+
+        if !nameOpt || !versionOpt {
+            response.badRequest(resp, "Missing package name or version".S)
+            return
+        }
+
+        var name = *nameOpt
+        var version = *versionOpt
+
+        repo.yankVersion(__copy!(name), __copy!(version)) catch {
+            response.internalError(resp, f"Failed to yank version: {ex!.what()}")
+            return
+        }
+
+        resp.header("Content-Type", "application/json; charset=utf-8")
+        resp.body() << "{\"message\":\"Version yanked successfully\"}"
+        resp.end(Status.Ok)
+    }))
+
+    // Unyank version
+    auth.admin(ep("POST /api/v1/admin/packages/{name}/{version}/unyank", (req: &const Request, resp: &Response) => {
+        var ctx = ep.context[RepoProvider](req)
+        var repo = ctx.repo
+
+        var nameOpt = req.param("name")
+        var versionOpt = req.param("version")
+
+        if !nameOpt || !versionOpt {
+            response.badRequest(resp, "Missing package name or version".S)
+            return
+        }
+
+        var name = *nameOpt
+        var version = *versionOpt
+
+        repo.unyankVersion(__copy!(name), __copy!(version)) catch {
+            response.internalError(resp, f"Failed to unyank version: {ex!.what()}")
+            return
+        }
+
+        resp.header("Content-Type", "application/json; charset=utf-8")
+        resp.body() << "{\"message\":\"Version unyanked successfully\"}"
+        resp.end(Status.Ok)
+    }))
+}
+
+// ============================================================================
+// Handler Implementations
+// ============================================================================
+
+/// Health check handler
+func handleHealth(resp: &Response): void {
+    var health = HealthResponse("ok".S, "1.0.0".S)
+    response.jsonResponse(resp, &health)
+}
+
+/// Search or list packages handler
+func handleSearchPackages(
+    resp: &Response,
+    repo: &PackageRepository,
+    query: __string?,
+    limit: i32,
+    offset: i32,
+    sort: __string
+): void {
+    if !query {
+        var result = repo.listPackages(limit, offset, sort) catch {
+            response.internalError(resp, f"Search failed: {ex!.what()}")
+            return
+        }
+        response.jsonResponse(resp, &result)
+    } else {
+        var result = repo.searchPackages(*query, limit, offset, sort) catch {
+            response.internalError(resp, f"Search failed: {ex!.what()}")
+            return
+        }
+        response.jsonResponse(resp, &result)
+    }
+}
+
+/// Get package details handler
+func handleGetPackage(resp: &Response, repo: &PackageRepository, name: __string): void {
+    var pkgOpt = repo.getPackage(name) catch {
+        response.internalError(resp, f"Database error: {ex!.what()}")
+        return
+    }
+
+    if !pkgOpt {
+        response.notFound(resp, f"Package not found: {name}")
+        return
+    }
+
+    response.jsonResponse(resp, pkgOpt.ref())
+}
+
+/// List versions handler
+func handleListVersions(resp: &Response, repo: &PackageRepository, name: __string): void {
+    var versions = repo.listVersions(name) catch {
+        response.internalError(resp, f"Database error: {ex!.what()}")
+        return
+    }
+
+    var result = VersionsResponse(String(name), &&versions)
+    response.jsonResponse(resp, &result)
+}
+
+/// Get specific version handler
+func handleGetVersion(
+    resp: &Response,
+    repo: &PackageRepository,
+    name: __string,
+    version: __string
+): void {
+    var versionOpt = repo.getVersion(name, version) catch {
+        response.internalError(resp, f"Database error: {ex!.what()}")
+        return
+    }
+
+    if !versionOpt {
+        response.notFound(resp, f"Version not found: {name}@{version}")
+        return
+    }
+
+    response.jsonResponse(resp, versionOpt.ref())
+}
+
+/// Record download handler
+func handleDownload(resp: &Response, repo: &PackageRepository, name: __string, version: __string): void {
+    repo.recordDownload(name, version)
+    resp.end(Status.NoContent)
+}
+
+/// Publish package handler
+func handlePublishPackage(resp: &Response, repo: &PackageRepository, registryUrl: &String, request: &PublishRequest): void {
+    // Validate required metadata fields
+    if request.metadata.name == null || request.metadata.name.empty() {
+        response.badRequest(resp, "Missing required field: metadata.name".S)
+        return
+    }
+    if request.metadata.version == null || request.metadata.version.empty() {
+        response.badRequest(resp, "Missing required field: metadata.version".S)
+        return
+    }
+
+    var _ = repo.publishPackage(request) catch {
+        response.internalError(resp, f"Publish failed: {ex!.what()}")
+        return
+    }
+
+    var result = PublishResponse(
+        __copy!(request.metadata.name),
+        __copy!(request.metadata.version),
+        f"{registryUrl}/packages/{request.metadata.name}"
+    )
+
+    response.jsonResponse(resp, &result, Status.Create)
+}
+
+/// Create token handler
+func handleCreateToken(resp: &Response, jwtSecret: __string, request: &CreateTokenRequest): void {
+    var token = generateToken(
+        request.subject.str(),
+        jwtSecret,
+        request.scope.str(),
+        request.expiresInDays
+    ) catch {
+        response.internalError(resp, f"Failed to generate token: {ex!.what()}")
+        return
+    }
+
+    var result = CreateTokenResponse(
+        &&token,
+        __copy!(request.subject),
+        __copy!(request.scope),
+        request.expiresInDays
+    )
+
+    response.jsonResponse(resp, &result, Status.Create)
+}
+
+// ============================================================================
+// Response Models
+// ============================================================================
+
+@json
+pub struct HealthResponse {
+    status: String = null
+    version: String = null
+
+    func `init`(status: String, version: String) {
+        this.status = &&status
+        this.version = &&version
+    }
+}
+
+@json
+pub struct VersionsResponse {
+    name: String = null
+    versions: Vector[VersionSummary] = null
+
+    func `init`(name: String, versions: Vector[VersionSummary]) {
+        this.name = &&name
+        this.versions = &&versions
+    }
+}
+
+@json
+pub struct PublishResponse {
+    name: String = null
+    version: String = null
+    url: String = null
+
+    func `init`(name: String, version: String, url: String) {
+        this.name = &&name
+        this.version = &&version
+        this.url = &&url
+    }
+}
+
+@json
+pub struct CreateTokenRequest {
+    subject: String = null
+    scope: String = null
+    expiresInDays: i64 = 365
+
+    func `init`() {
+        this.subject = String()
+        this.scope = String()
+        this.expiresInDays = 365
+    }
+}
+
+@json
+pub struct CreateTokenResponse {
+    token: String = null
+    subject: String = null
+    scope: String = null
+    expiresInDays: i64 = 0
+
+    func `init`(token: String, subject: String, scope: String, expiresInDays: i64) {
+        this.token = &&token
+        this.subject = &&subject
+        this.scope = &&scope
+        this.expiresInDays = expiresInDays
+    }
+}

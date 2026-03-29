@@ -1,0 +1,284 @@
+module api_middleware
+
+import { Request, Response, Method, Route, Status } from "stdlib/http.cxy"
+import { verify, decode, Jwt, JwtError } from "stdlib/jwt.cxy"
+import { Time } from "stdlib/time.cxy"
+import { Value } from "stdlib/value.cxy"
+import { HashSet, HashMap } from "stdlib/hash.cxy"
+import { PackageRepository } from "../repository.cxy"
+import { SQLitePackageRepository } from "../db/sqlite_repository.cxy"
+import { unauthorized } from "./response.cxy"
+
+exception MiddlewareError(msg: String) => msg.str()
+
+// ============================================================================
+// RepoProvider Middleware
+//
+// Provides repository access to handlers via context.
+// Initializes and manages repository lifecycle.
+// ============================================================================
+
+pub struct RepoProviderContext {
+    repo: &PackageRepository
+    registryUrl: String = null
+    func `init`(){}
+}
+
+pub class RepoProvider {
+    type Context = RepoProviderContext
+
+    _repo: PackageRepository = null
+    _registryUrl: String = null
+
+    func `init`() {
+        // Default constructor (no params)
+    }
+
+    /// Configure repository from settings struct
+    /// Expected fields: dbPath (string), registryUrl (String or string)
+    func configure[T](conf: T): !void {
+        require!(T.isStruct, "conf must be a struct")
+
+        // Open and initialize repository from config
+        #if (has_member!(#T, "dbPath", #__string)) {
+            _repo = SQLitePackageRepository.open(conf.dbPath.str())
+            _repo.initialize()
+        }
+
+        // Extract registry URL
+        #if (has_member!(#T, "registryUrl", #String)) {
+            _registryUrl = &&conf.registryUrl
+        }
+        else #if (has_member!(#T, "registryUrl", #string)) {
+            _registryUrl = String(conf.registryUrl)
+        }
+        else {
+            _registryUrl = "https://registry.cxy-lang.org".S
+        }
+    }
+
+    /// Bootstrap admin token on first run.
+    /// Should be called after configure() to generate the initial admin token.
+    func bootstrapAdminToken(jwtSecret: __string): !bool {
+        return _repo.bootstrapAdminToken(jwtSecret)
+    }
+
+    func before(@unused req: &const Request, @unused resp: &Response, ctx: &Context): void {
+        // Provide repo reference and registry URL to context
+        ctx.repo = &_repo
+        ctx.registryUrl = _registryUrl
+    }
+
+    func after(@unused req: &const Request, @unused resp: &Response, @unused ctx: &Context): void {
+        // For SQLite: no-op
+        // For PostgreSQL: would release connection back to pool here
+    }
+}
+
+// ============================================================================
+// AuthMiddleware
+//
+// Validates JWT tokens for protected endpoints.
+// Uses stateless JWT verification - no database lookup needed.
+// Routes can be exempted using the exempt() method.
+// ============================================================================
+
+struct RouteAuthConfig {
+    isExempt: bool = false
+    isAdmin: bool = false
+    isUI: bool = false
+}
+
+pub class AuthMiddleware {
+    _jwtSecret: String = null
+    _routes: HashMap[u64, RouteAuthConfig] = null
+
+    func `init`() {
+        // Default constructor
+        _routes = HashMap[u64, RouteAuthConfig]()
+    }
+
+    /// Configure JWT secret from settings struct
+    /// Expected fields: jwtSecret (String)
+    func configure[T](conf: T): void {
+        require!(T.isStruct, "conf must be a struct")
+
+        #if (has_member!(#T, "jwtSecret", #String)) {
+            _jwtSecret = conf.jwtSecret
+        }
+        else #if (has_member!(#T, "jwtSecret", #string)) {
+            _jwtSecret = String(conf.jwtSecret)
+        }
+    }
+
+    /// Mark a route as exempt from authentication
+    /// Usage: auth.exempt(server("POST /api/v1/packages/{name}/{version}/download", ...))
+    @inline
+    func exempt(route: &Route): &Route {
+        _routes.insert(route.id(), RouteAuthConfig{isExempt: true})
+        return route
+    }
+
+    /// Mark a route as requiring admin scope
+    /// Usage: auth.admin(server("POST /api/v1/admin/tokens", ...))
+    @inline
+    func admin(route: &Route): &Route {
+        _routes.insert(route.id(), RouteAuthConfig{isAdmin: true})
+        return route
+    }
+
+    /// Mark a route as admin UI (requires cookie-based authentication)
+    @inline
+    func ui(route: &Route, requireAdmin: bool = true): &Route {
+        _routes.insert(route.id(), RouteAuthConfig{isAdmin: requireAdmin, isUI: true})
+        route.setAttrs({parseCookies: true})
+        return route
+    }
+
+    /// Redirect to admin login page for admin UI routes
+    @inline
+    func redirectToLogin(resp: &Response): void {
+        resp.header("Location", "/admin/login")
+        resp.end(Status.Found)
+    }
+
+    func before(req: &const Request, resp: &Response): void {
+        // Check if this route has auth config
+        var route = req.route()
+        var config = _routes.get(route.id())
+
+        // If no config, route is exempt
+        if !config || config&.isExempt{
+            return
+        }
+
+        // For UI routes, try to get token from cookie first
+        var token = __string()
+        if config&.isUI {
+            var cookie = req.cookie("admin_token")
+            if !!cookie {
+                token = __copy!(*cookie)
+            }
+        }
+
+        // If no cookie token, try Authorization header
+        if token.empty() {
+            var authHeader = req.header("Authorization".S)
+            if !authHeader {
+                if config&.isAdmin {
+                    this.redirectToLogin(resp)
+                    return
+                }
+                unauthorized(resp, "Missing Authorization header".S)
+                return
+            }
+
+            // Extract Bearer token
+            var tokenOpt = this.extractBearerToken(authHeader&.__str())
+            if !tokenOpt {
+                if config&.isAdmin {
+                    this.redirectToLogin(resp)
+                    return
+                }
+                unauthorized(resp, "Invalid Authorization format. Expected: Bearer <token>".S)
+                return
+            }
+            token = *tokenOpt
+        }
+
+        // Check if JWT secret is configured
+        if _jwtSecret == null {
+            if config&.isAdmin {
+                this.redirectToLogin(resp)
+                return
+            }
+            unauthorized(resp, "Server misconfigured: JWT secret not set".S)
+            return
+        }
+
+        // Verify JWT signature
+        var isValid = verify(token, _jwtSecret.__str()) catch {
+            if config&.isAdmin {
+                this.redirectToLogin(resp)
+                return
+            }
+            unauthorized(resp, "Invalid JWT token".S)
+            return
+        }
+
+        if !isValid {
+            if config&.isAdmin {
+                this.redirectToLogin(resp)
+                return
+            }
+            unauthorized(resp, "Invalid token signature".S)
+            return
+        }
+
+        // Decode JWT and check expiration
+        var jwt = Jwt()
+        decode(&jwt, token, _jwtSecret.__str()) catch {
+            if config&.isAdmin {
+                this.redirectToLogin(resp)
+                return
+            }
+            unauthorized(resp, "Malformed JWT token".S)
+            return
+        }
+
+        // Check expiration
+        var exp = jwt.payload().exp
+        if exp > 0 {
+            var now = Time().timestamp()
+            if exp < now {
+                if config&.isAdmin {
+                    this.redirectToLogin(resp)
+                    return
+                }
+                unauthorized(resp, "Token expired".S)
+                return
+            }
+        }
+
+        // Check if this is an admin route
+        if config&.isAdmin {
+            // Admin route requires "admin" scope
+            var scope = jwt.claim("scope".S)
+            if !scope {
+                this.redirectToLogin(resp)
+                return
+            }
+
+            var scopeStr = scope&.asString() catch {
+                this.redirectToLogin(resp)
+                return
+            }
+
+            if scopeStr != "admin" {
+                this.redirectToLogin(resp)
+                return
+            }
+        }
+        // Regular authenticated routes accept any valid token
+    }
+
+    func after(@unused req: &const Request, @unused resp: &Response): void {
+        // No-op
+    }
+
+    /// Extract Bearer token from Authorization header
+    /// Expected format: "Bearer <token>"
+    @inline
+    func extractBearerToken(header: __string): __string? {
+        if header.size() < 7 {
+            return null
+        }
+
+        var prefix = header.substr(0, 7)
+        if prefix != "Bearer ".s {
+            return null
+        }
+
+        return header.substr(7)
+    }
+}

@@ -1,0 +1,95 @@
+module api_response
+
+import { Response, Status } from "stdlib/http.cxy"
+import { toJSON } from "stdlib/json.cxy"
+
+/// Error detail structure for JSON error responses
+pub struct ErrorDetail {
+    code: String
+    message: String
+
+    func `init`(code: String, message: String) {
+        this.code = &&code
+        this.message = &&message
+    }
+}
+
+/// Error response wrapper (matches REST API spec: { "error": { ... } })
+pub struct ErrorResponse {
+    error: ErrorDetail
+
+    func `init`(code: String, message: String) {
+        this.error = ErrorDetail(&&code, &&message)
+    }
+}
+
+/// Convert HTTP Status to simple string code for JSON errors
+pub func statusToCode(status: Status): String {
+    switch status {
+        Status.BadRequest => return "BAD_REQUEST".S
+        Status.Unauthorized => return "UNAUTHORIZED".S
+        Status.Forbidden => return "FORBIDDEN".S
+        Status.NotFound => return "NOT_FOUND".S
+        Status.Conflict => return "CONFLICT".S
+        Status.InternalError => return "INTERNAL_ERROR".S
+        ... => return "ERROR".S
+    }
+}
+
+/// Send JSON response with typed data
+/// Usage: jsonResponse(resp, &myData)
+pub func jsonResponse[T](resp: &Response, data: &const T, status: Status = Status.Ok): void {
+    resp.header("Content-Type".S, "application/json; charset=utf-8".S)
+    toJSON(resp.body(), data)
+    resp.end(status)
+}
+
+/// Send JSON error response with status code and message
+pub func jsonError(resp: &Response, status: Status, message: String): void {
+    var code = statusToCode(status)
+    var errResp = ErrorResponse(&&code, &&message)
+
+    resp.header("Content-Type".S, "application/json; charset=utf-8".S)
+    toJSON(resp.body(), &errResp)
+    resp.end(status)
+}
+
+// -----------------------------------------------------------------------
+// Convenience helpers for common error responses
+// -----------------------------------------------------------------------
+
+/// Send 404 Not Found error
+@inline
+pub func notFound(resp: &Response, message: String): void {
+    jsonError(resp, Status.NotFound, &&message)
+}
+
+/// Send 400 Bad Request error
+@inline
+pub func badRequest(resp: &Response, message: String): void {
+    jsonError(resp, Status.BadRequest, &&message)
+}
+
+/// Send 401 Unauthorized error
+@inline
+pub func unauthorized(resp: &Response, message: String): void {
+    jsonError(resp, Status.Unauthorized, &&message)
+}
+
+/// Send 500 Internal Server Error
+@inline
+pub func internalError(resp: &Response, message: String): void {
+    jsonError(resp, Status.InternalError, &&message)
+}
+
+/// Send 409 Conflict error
+@inline
+pub func conflict(resp: &Response, message: String): void {
+    jsonError(resp, Status.Conflict, &&message)
+}
+
+/// Send 403 Forbidden error
+@inline
+pub func forbidden(resp: &Response, message: String): void {
+    jsonError(resp, Status.Forbidden, &&message)
+}

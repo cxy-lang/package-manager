@@ -1,0 +1,55 @@
+module package_manager_config
+
+import { getenv } from "stdlib/os.cxy"
+
+pub struct Config {
+    port: u16 = 8080
+    dbPath: __string = "registry.db".s
+    registryUrl: String = "http://localhost:8080".S
+    jwtSecret: String = null
+}
+
+exception ConfigError(msg: String) => msg.str()
+
+/// Parse configuration from environment variables
+///
+/// Environment variables:
+/// - PORT: Server port (default: 8080)
+/// - DB_PATH: Database file path (default: registry.db)
+/// - REGISTRY_URL: Public registry URL (default: http://localhost:8080)
+/// - JWT_SECRET: JWT signing secret (required)
+///
+/// Args:
+///   args: Command-line arguments (currently unused)
+///
+/// Returns:
+///   Configured Config struct
+///
+/// Throws:
+///   ConfigError if required variables are missing or invalid
+pub func parse(@unused args: [string]): !Config {
+    var config = Config{}
+
+    // Read PORT
+    var portStr = getenv("PORT", "8080")
+    var portVal = portStr.toi[i32]()
+    if portVal <= 0 || portVal > 65535 {
+        raise ConfigError("PORT must be between 1 and 65535".S)
+    }
+    config.port = <u16>portVal
+
+    // Read DB_PATH
+    config.dbPath = getenv("DB_PATH", "registry.db")
+
+    // Read REGISTRY_URL
+    config.registryUrl = String(getenv("REGISTRY_URL", "http://localhost:8080"))
+
+    // Read JWT_SECRET (required)
+    var jwtSecretStr = getenv("JWT_SECRET", "default-test-secret")
+    if jwtSecretStr.empty() {
+        raise ConfigError("JWT_SECRET cannot be empty".S)
+    }
+    config.jwtSecret = String(jwtSecretStr)
+
+    return config
+}

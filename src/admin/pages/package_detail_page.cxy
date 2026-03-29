@@ -1,0 +1,186 @@
+module package_detail_page
+
+import plugin "cxyml" as cxyml
+import { View } from "@cxyml"
+import { Vector } from "stdlib/vector.cxy"
+import { AdminLayout } from "../components/admin_layout.cxy"
+import { PackageDetails, VersionSummary } from "../../models.cxy"
+
+// Content component - just the page content without layout
+class PackageDetailContent: View {
+    - _package: PackageDetails;
+    - _versions: Vector[VersionSummary];
+
+    func `init`(pkg: PackageDetails, versions: Vector[VersionSummary]) {
+        _package = &&pkg
+        _versions = &&versions
+    }
+
+    @override
+    func render(os: &OutputStream): void {
+        cxyml::render("""
+            <div class="admin-container">
+                <div class="page-header">
+                    <h1>{{ _package.pkg.name }}</h1>
+                    <p>{{ _package.pkg.description }}</p>
+                </div>
+
+                <div class="admin-content">
+                    <div class="card-header">Package Information</div>
+                    <div class="card-body">
+                        <table style="width: 100%;">
+                            <tr>
+                                <td style="padding: 0.5rem 0; font-weight: 600; width: 150px;">Author</td>
+                                <td style="padding: 0.5rem 0;">{{ _package.pkg.author }}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.5rem 0; font-weight: 600;">License</td>
+                                <td style="padding: 0.5rem 0;">{{ _package.pkg.license }}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.5rem 0; font-weight: 600;">Repository</td>
+                                <td style="padding: 0.5rem 0;">
+                                    <a href="{{ _package.pkg.repository }}" target="_blank" style="color: var(--admin-primary);">
+                                        {{ _package.pkg.repository }}
+                                    </a>
+                                </td>
+                            </tr>
+                            {{ if _package.pkg.homepage.size() > 0 }}
+                                <tr>
+                                    <td style="padding: 0.5rem 0; font-weight: 600;">Homepage</td>
+                                    <td style="padding: 0.5rem 0;">
+                                        <a href="{{ _package.pkg.homepage }}" target="_blank" style="color: var(--admin-primary);">
+                                            {{ _package.pkg.homepage }}
+                                        </a>
+                                    </td>
+                                </tr>
+                            {{ /if }}
+                            <tr>
+                                <td style="padding: 0.5rem 0; font-weight: 600;">Total Downloads</td>
+                                <td style="padding: 0.5rem 0;">{{ _package.pkg.total_downloads }}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.5rem 0; font-weight: 600;">Created</td>
+                                <td style="padding: 0.5rem 0;">{{ _package.pkg.created_at }}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.5rem 0; font-weight: 600;">Last Updated</td>
+                                <td style="padding: 0.5rem 0;">{{ _package.pkg.updated_at }}</td>
+                            </tr>
+                        </table>
+
+                        <div style="margin-top: 1.5rem;">
+                            <a href="/packages/{{ _package.pkg.name }}" target="_blank" class="btn btn-secondary">
+                                View Public Page
+                            </a>
+                            <a href="/admin/packages" class="btn btn-secondary" style="margin-left: 0.5rem;">
+                                Back to Packages
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="admin-content">
+                    <div class="card-header">Version Management</div>
+
+                    {{ if _versions.empty() }}
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📦</div>
+                            <p class="empty-state-text">No versions found</p>
+                        </div>
+                    {{ else }}
+                        <div class="table-wrapper">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Version</th>
+                                        <th>Tag</th>
+                                        <th>Commit</th>
+                                        <th>Published</th>
+                                        <th>Downloads</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {{ for ver in _versions }}
+                                        <tr>
+                                            <td>
+                                                <span class="badge badge-info">{{ ver.0.version }}</span>
+                                            </td>
+                                            <td>
+                                                <code style="font-size: 0.875rem;">{{ ver.0.tag }}</code>
+                                            </td>
+                                            <td>
+                                                <code style="font-size: 0.875rem;">{{ ver.0.commit }}</code>
+                                            </td>
+                                            <td style="font-size: 0.875rem;">{{ ver.0.published_at }}</td>
+                                            <td>{{ ver.0.downloads }}</td>
+                                            <td>
+                                                {{ if ver.0.yanked }}
+                                                    <span class="badge badge-danger">Yanked</span>
+                                                {{ else }}
+                                                    <span class="badge badge-success">Active</span>
+                                                {{ /if }}
+                                            </td>
+                                            <td>
+                                                <div class="action-buttons">
+                                                    {{ if ver.0.yanked }}
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-sm btn-secondary"
+                                                            onclick="unyankVersion('{{ _package.pkg.name }}', '{{ ver.0.version }}')"
+                                                        >
+                                                            Unyank
+                                                        </button>
+                                                    {{ else }}
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-sm btn-danger"
+                                                            onclick="yankVersion('{{ _package.pkg.name }}', '{{ ver.0.version }}')"
+                                                        >
+                                                            Yank
+                                                        </button>
+                                                    {{ /if }}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    {{ /for }}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="card" style="margin-top: 1.5rem; background: #fffbeb; border-color: #fde68a;">
+                            <p style="color: #92400e; font-size: 0.875rem; margin-bottom: 0.5rem;">
+                                <strong>⚠️  About Yanking</strong>
+                            </p>
+                            <p style="color: #92400e; font-size: 0.875rem; margin-bottom: 0;">
+                                Yanking a version prevents new installations but does not break existing users.
+                                Yanked versions can still be downloaded if explicitly requested.
+                                Use this feature for versions with critical bugs or security issues.
+                            </p>
+                        </div>
+                    {{ /if }}
+                </div>
+            </div>
+        """)
+    }
+}
+
+// Page component - wraps content with layout
+pub class PackageDetailPage: View {
+    - _content: PackageDetailContent;
+    - _packageName: String;
+
+    func `init`(pkg: PackageDetails, versions: Vector[VersionSummary]) {
+        _packageName = __copy!(pkg.pkg.name)
+        _content = PackageDetailContent(&&pkg, &&versions)
+    }
+
+    @override
+    func render(os: &OutputStream): void {
+        var title = f"Manage {_packageName}"
+        var layout = AdminLayout(&&title, &_content)
+        layout.render(os)
+    }
+}

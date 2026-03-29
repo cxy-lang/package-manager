@@ -1,5 +1,44 @@
-import { hello } from "./src/hello.cxy"
+import { Server, Config } from "stdlib/http.cxy"
+import { Address } from "stdlib/net.cxy"
+import { RepoProvider, AuthMiddleware } from "./src/api/middleware.cxy"
+import { Endpoint, health, packages, admin } from "./src/api/handlers.cxy"
+import { adminUI } from "./src/admin/handlers.cxy"
+import { parse as parseConfig } from "./src/config.cxy"
 
-func main() {
-  println(hello("World"))
+func main(args: [string]): !void {
+    var config = parseConfig(args)
+    // Display startup configuration
+    println("=====================================")
+    println("  Cxy Package Registry Server")
+    println("=====================================")
+    println(f"Port:         {config.port}")
+    println(f"Database:     {config.dbPath}")
+    println(f"Registry URL: {config.registryUrl}")
+    println("JWT Secret:   [configured]")
+    println("=====================================")
+
+    // Create server with middleware
+    var server = Endpoint(Config{address: Address("0.0.0.0", config.port)})
+
+    // Configure middleware
+    server.middleware[RepoProvider]().configure(config)
+    server.middleware[AuthMiddleware]().configure(config)
+
+    // Bootstrap admin token on first run
+    server.middleware[RepoProvider]().bootstrapAdminToken(config.jwtSecret.__str()) catch {
+        println(f"Warning: Failed to bootstrap admin token: {ex!}")
+        yield false
+    }
+
+    // Register routes
+    health(&server)
+    packages(&server)
+    admin(&server)
+    adminUI(&server)
+
+    // Start server
+    println(f"\nServer listening on port {config.port}")
+    println("Press Ctrl+C to stop\n")
+
+    server.start()
 }

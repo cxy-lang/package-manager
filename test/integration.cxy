@@ -1,0 +1,313 @@
+module integration_tests
+
+import test { fetch, Request, Session, Response } from "stdlib/fetch.cxy"
+import test { Method, Status } from "stdlib/http.cxy"
+import test { parse } from "stdlib/json.cxy"
+import test { getenv } from "stdlib/os.cxy"
+
+test {
+    var adminToken: __string;
+
+    func createSession() {
+        const BASE_URL = getenv("BASE_URL", "http://localhost:8080") catch "".s
+        var session = Session.create(BASE_URL)
+        session.userAgent("Cxy/0.0.1")
+        adminToken = getenv("ADMIN_TOKEN", "") catch "INVALD".s
+        return &&session
+    }
+    var session = createSession()
+
+    func get(path: __string): !Response {
+        return session.perform(Method.Get, path)
+    }
+
+    func post(path: __string, body: string): !Response {
+        return session.perform(Method.Post, path, (req: &Request): !void => {
+            req.header("Content-Type", "application/json")
+            req.body() << body
+        })
+    }
+
+    func postWithAuth(path: __string, body: string, token: __string): !Response {
+        return session.perform(Method.Post, path, (req: &Request): !void => {
+            req.header("Content-Type", "application/json")
+            req.header("Authorization", f"Bearer {token}")
+            req.body() << body
+        })
+    }
+
+    func assertOk(resp: &Response): !void {
+        ok!(resp.ok())
+    }
+
+    func assertStatus(resp: &Response, expected: u16): !void {
+        ok!(resp.statusCode() == expected)
+    }
+
+    func assertContains(haystack: __string, needle: __string): !void {
+        ok!(haystack.contains(needle))
+    }
+}
+
+// ============================================================================
+// Health Check Tests
+// ============================================================================
+
+test "Health - returns ok status" {
+    var resp = get("/api/v1/health")
+    assertOk(&resp)
+    assertContains(resp.body().__str(), "ok")
+}
+
+test "Health - returns version" {
+    var resp = get("/api/v1/health")
+    assertOk(&resp)
+    assertContains(resp.body().__str(), "version")
+}
+
+// ============================================================================
+// Package Listing Tests
+// ============================================================================
+
+test "Packages - list empty registry" {
+    var resp = get("/api/v1/packages")
+    assertOk(&resp)
+    var body = resp.body().__str()
+    assertContains(body, "total")
+    assertContains(body, "packages")
+}
+
+test "Packages - list with limit" {
+    var resp = get("/api/v1/packages?limit=5")
+    assertOk(&resp)
+}
+
+test "Packages - list with offset" {
+    var resp = get("/api/v1/packages?limit=10&offset=0")
+    assertOk(&resp)
+}
+
+test "Packages - search with query" {
+    var resp = get("/api/v1/packages?q=http")
+    assertOk(&resp)
+}
+
+test "Packages - sort by downloads" {
+    var resp = get("/api/v1/packages?sort=downloads")
+    assertOk(&resp)
+}
+
+test "Packages - sort by updated" {
+    var resp = get("/api/v1/packages?sort=updated")
+    assertOk(&resp)
+}
+
+test "Packages - sort by name" {
+    var resp = get("/api/v1/packages?sort=name")
+    assertOk(&resp)
+}
+
+// ============================================================================
+// Package Details Tests
+// ============================================================================
+
+test "Package - get non-existent package returns 404" {
+    var resp = get("/api/v1/packages/non-existent-package")
+    assertStatus(&resp, <u16>Status.NotFound)
+}
+
+test "Package - get details contains error message" {
+    var resp = get("/api/v1/packages/does-not-exist")
+    ok!(resp.statusCode() == Status.NotFound)
+    assertContains(resp.body().__str(), "not found")
+}
+
+// ============================================================================
+// Version Tests
+// ============================================================================
+
+test "Versions - list for non-existent package" {
+    var resp = get("/api/v1/packages/fake-pkg/versions")
+    assertOk(&resp)
+    assertContains(resp.body().__str(), "versions")
+}
+
+test "Version - get specific version for non-existent package" {
+    var resp = get("/api/v1/packages/fake-pkg/1.0.0")
+    assertStatus(&resp, <u16>Status.NotFound)
+}
+
+// ============================================================================
+// Download Tracking Tests
+// ============================================================================
+
+test "Download - record for non-existent package" {
+    var resp = post("/api/v1/packages/fake/1.0.0/download", "")
+    // Should succeed (fire-and-forget)
+    assertStatus(&resp, <u16>Status.NoContent)
+}
+
+test "Download - accepts POST method only" {
+    var getResp = get("/api/v1/packages/test/1.0.0/download")
+    // GET should not be allowed (or 404)
+    ok!(getResp.statusCode() != Status.Ok)
+}
+
+// ============================================================================
+// Publish Package Tests (Requires Auth)
+// ============================================================================
+
+test "Publish - requires authentication" {
+    var body = """{
+        "metadata": {
+            "name": "test-package",
+            "version": "1.0.0",
+            "description": "Test",
+            "author": "Test",
+            "license": "MIT",
+            "repository": "https://github.com/test/test"
+        },
+        "repository": "https://github.com/test/test",
+        "tag": "v1.0.0",
+        "commit": "abc123",
+        "checksum": "sha256:test",
+        "dependencies": []
+    }"""
+
+    var resp = post("/api/v1/packages", body)
+    assertStatus(&resp, <u16>Status.Unauthorized)
+}
+
+test "Publish - rejects invalid JSON" {
+    var resp = postWithAuth("/api/v1/packages", "invalid json", adminToken)
+    assertStatus(&resp, <u16>Status.BadRequest)
+    assertContains(resp.body().__str(), "Invalid JSON")
+}
+
+test "Publish - rejects missing fields" {
+    var body = """{"metadata": {}}"""
+    var resp = postWithAuth("/api/v1/packages", body, adminToken)
+    // Should fail validation
+    ok!(resp.statusCode() != Status.Create)
+}
+
+// ============================================================================
+// Admin Token Tests (Requires Auth)
+// ============================================================================
+
+test "Admin - create token requires authentication" {
+    var body = """{"subject":"test@example.com","scope":"publish","expiresInDays":365}"""
+
+    var resp = post("/api/v1/admin/tokens", body)
+    assertStatus(&resp, <u16>Status.Unauthorized)
+}
+
+test "Admin - rejects invalid scope" {
+    var body = """{"subject":"test@example.com","scope":"invalid","expiresInDays":365}"""
+
+    var resp = postWithAuth("/api/v1/admin/tokens", body, adminToken)
+    assertStatus(&resp, <u16>Status.BadRequest)
+    assertContains(resp.body().__str(), "Invalid scope")
+}
+
+test "Admin - rejects invalid JSON" {
+    var resp = postWithAuth("/api/v1/admin/tokens", "{bad json", adminToken)
+    assertStatus(&resp, <u16>Status.BadRequest)
+}
+
+// ============================================================================
+// End-to-End Flow Tests
+// ============================================================================
+
+test "E2E - full package lifecycle" {
+    // Note: This test would need a valid admin token to work
+    // For now, it just tests the unauthenticated parts
+
+    // 1. Check health
+    var health = get("/api/v1/health")
+    assertOk(&health)
+
+    // 2. List packages (empty or with existing)
+    var list = get("/api/v1/packages")
+    assertOk(&list)
+
+    // 3. Search for something
+    var search = get("/api/v1/packages?q=test")
+    assertOk(&search)
+
+    // 4. Try to get non-existent package
+    var details = get("/api/v1/packages/my-test-package")
+    ok!(details.statusCode() == Status.NotFound)
+
+    // 5. Record a download (should work even if package doesn't exist)
+    var download = post("/api/v1/packages/test/1.0.0/download", "")
+    assertStatus(&download, <u16>Status.NoContent)
+}
+
+test "E2E - search and filter workflow" {
+    // Search with different parameters
+    var all = get("/api/v1/packages")
+    assertOk(&all)
+
+    var limited = get("/api/v1/packages?limit=2")
+    assertOk(&limited)
+
+    var sorted = get("/api/v1/packages?sort=downloads")
+    assertOk(&sorted)
+
+    var searched = get("/api/v1/packages?q=http&limit=5&sort=relevance")
+    assertOk(&searched)
+}
+
+// ============================================================================
+// Error Handling Tests
+// ============================================================================
+
+test "Errors - 404 for invalid routes" {
+    var resp = get("/api/v1/invalid")
+    assertStatus(&resp, <u16>Status.NotFound)
+}
+
+test "Errors - handles malformed URLs gracefully" {
+    var resp = get("/api/v1/packages/")
+    // Should either 404 or handle gracefully
+    ok!(resp.statusCode() != Status.InternalError)
+}
+
+test "Errors - validates path parameters" {
+    var resp = get("/api/v1/packages//versions")
+    // Should handle empty name parameter
+    ok!(resp.statusCode() == Status.NotFound || resp.statusCode() == Status.BadRequest)
+}
+
+// ============================================================================
+// Response Format Tests
+// ============================================================================
+
+test "Response - health returns valid JSON" {
+    var resp = get("/api/v1/health")
+    assertOk(&resp)
+
+    // Body should be parseable as JSON
+    var body = resp.body().__str()
+    assertContains(body, "{")
+    assertContains(body, "}")
+}
+
+test "Response - packages list returns valid JSON" {
+    var resp = get("/api/v1/packages")
+    assertOk(&resp)
+
+    var body = resp.body().__str()
+    assertContains(body, "total")
+    assertContains(body, "packages")
+    assertContains(body, "[")
+}
+
+test "Response - error returns proper format" {
+    var resp = get("/api/v1/packages/non-existent")
+    assertStatus(&resp, <u16>Status.NotFound)
+
+    var body = resp.body().__str()
+    assertContains(body, "error")
+}

@@ -4,11 +4,72 @@ package:
   license: MIT
 
 builds:
-  app:
+  package-manager:
     entry: main.cxy
-    output: app
+    output: package-manager
 
-dependencies: []
+dependencies:
+  - name: cxyml
+    repository: https://github.com/cxy-lang/cxyml.git
+    version: "*"
+    tag: v0.1.0
+
+install:
+  - name: disable-macos-wait-async-warning
+    required: true
+    script: |
+      if [ $(uname) = "Darwin" ]; then
+        # Disable macOS wait async warning
+        echo "--define=MACOS_WAIT_ASYNC_WARNING_OFF=1"
+      fi
+  - name: openssl
+    required: true
+    script: |
+      # We do not libs, cxy sources usually specify the libs they need
+      cxy package find-system openssl --include-dir --lib-dir
 
 tests:
   - file: "src/**/*.cxy"
+
+scripts:
+  build-app:
+    inputs:
+      - src/**/*.cxy
+    outputs:
+      - "{{BUILD_DIR}}/package-manager"
+    command: cxy package build
+  run-tests:
+    depends: [build-app]
+    command: |
+      # Export custom secret
+      export JWT_SECRET=my-custom-test-secret
+      export PORT=8100
+      export BASE_URL=http://localhost:${PORT}
+      export DB_PATH={{BUILD_DIR}}/registry.db
+      # Remove the old database file, if it exists
+      rm -f ${DB_PATH}
+      # Start the server asynchronously, cxy will kill the process after
+      PID=$(cxy utils async-cmd-start {{BUILD_DIR}}/package-manager --capture)
+      # Wait for the server port to be ready
+      if ! cxy utils wait-for-port ${PORT} --timeout 10000; then
+        echo "Server did not start in time"
+        cxy utils async-cmd-logs $PID
+        exit 1
+      fi
+      # Read the admin token from the database
+      ADMIN_TOKEN=$(sqlite3 ${DB_PATH} "SELECT token FROM admin_token WHERE id = 1")
+      export ADMIN_TOKEN
+      # Run the integration tests
+      if ! cxy package test test/integration.cxy; then
+        # Read logs
+        echo "=== Server logs ==="
+        cxy utils async-cmd-logs $PID
+        exit 1
+      fi
+  release:
+    depends: [build-app]
+    command: |
+      echo "Releasing..."
+      mkdir -p {{BUILD_DIR}}/release
+      cp -r {{BUILD_DIR}}/package-manager {{BUILD_DIR}}/release
+      cp -r {{SOURCE_DIR}}/static {{BUILD_DIR}}/release/

@@ -1,0 +1,136 @@
+module pkg_models
+
+import { Vector } from "stdlib/vector.cxy"
+
+/// Represents a package in the registry.
+@json
+pub struct Package {
+    id:              i64 = 0
+    name:            String = null
+    description:     String = null
+    author:          String = null
+    license:         String = null
+    repository:      String = null
+    @json(optional: true)
+    homepage:        String = null
+    @json(optional: true)
+    readme:          String = null         // Raw markdown content
+    total_downloads: i64 = 0
+    created_at:      String = null         // ISO 8601 timestamp
+    updated_at:      String = null         // ISO 8601 timestamp
+}
+
+/// Represents a specific version of a package.
+@json
+pub struct Version {
+    id:           i64 = 0
+    package_id:   i64 = 0
+    version:      String = null            // Semver string (e.g., "1.2.3")
+    @json(optional: true)
+    tag:          String = null            // Git tag (e.g., "v1.2.3")
+    commit:       String = null            // Full git commit SHA
+    checksum:     String = null            // Format: "sha256:<hex>"
+    yanked:       bool = false
+    downloads:    i64 = 0
+    published_at: String = null            // ISO 8601 timestamp
+}
+
+/// Represents a dependency of a specific package version.
+@json
+pub struct Dependency {
+    id:                 i64 = 0
+    version_id:         i64 = 0
+    name:               String = null
+    @json(optional: true)
+    repository:         String = null
+    version_constraint: String = null      // Semver constraint (e.g., "^1.2.0", "*")
+    is_dev:             bool = false
+}
+
+/// Represents an authentication token for publishing packages.
+@json
+pub struct PublishToken {
+    id:         i64 = 0
+    token_hash: String = null              // SHA-256 hash of the actual token
+    label:      String = null              // Human-readable label (e.g., "alice CI")
+    created_at: String = null              // ISO 8601 timestamp
+    @json(optional: true)
+    last_used:  String = null              // ISO 8601 timestamp (nullable)
+}
+
+/// Metadata extracted from Cxyfile.yaml for publishing.
+@json
+pub struct PackageMetadata {
+    name:         String = null
+    version:      String = null
+    description:  String = null
+    author:       String = null
+    license:      String = null
+    repository:   String = null
+    @json(optional: true)
+    homepage:     String = null
+}
+
+/// Complete data needed to publish a new package version.
+@json
+pub struct PublishRequest {
+    repository: String = null              // Git repository URL
+    tag:        String = null              // Git tag
+    commit:     String = null              // Full commit SHA
+    checksum:   String = null              // Source tree checksum
+    metadata:   PackageMetadata = null
+    @json(optional: true)
+    readme:     String = null              // Raw markdown from README.md
+    dependencies: Vector[DependencySpec] = null
+}
+
+/// Dependency specification for publishing.
+@json
+pub struct DependencySpec {
+    name:               String = null
+    @json(optional: true)
+    repository:         String = null
+    version_constraint: String = null
+    is_dev:             bool = false
+}
+
+/// Summary of a package for list views (without full README).
+@json
+pub struct PackageSummary {
+    name:            String = null
+    description:     String = null
+    author:          String = null
+    license:         String = null
+    repository:      String = null
+    latest_version:  String = null
+    total_downloads: i64 = 0
+    updated_at:      String = null
+}
+
+/// Version summary for version lists (without dependencies).
+@json
+pub struct VersionSummary {
+    version:      String = null
+    @json(optional: true)
+    tag:          String = null
+    commit:       String = null
+    published_at: String = null
+    downloads:    i64 = 0
+    yanked:       bool = false
+}
+
+/// Complete package details with latest version info.
+@json
+pub struct PackageDetails {
+    pkg:          Package = null
+    latest:       Version = null
+    dependencies: Vector[Dependency] = null
+    versions:     Vector[VersionSummary] = null
+}
+
+/// Search/pagination result container.
+@json
+pub struct PackageSearchResult {
+    total:    i64 = 0
+    packages: Vector[PackageSummary] = null
+}

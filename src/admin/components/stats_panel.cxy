@@ -1,0 +1,30 @@
+module stats_panel
+
+import plugin "cxyml" as cxyml
+import { View } from "@cxyml"
+
+pub class StatsPanel: View {
+    - _totalPackages: i64;
+    - _totalDownloads: i64;
+
+    func `init`(totalPackages: i64, totalDownloads: i64) {
+        _totalPackages = totalPackages
+        _totalDownloads = totalDownloads
+    }
+
+    @override
+    func render(os: &OutputStream): void {
+        cxyml::render("""
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Total Packages</div>
+                    <div class="stat-value">{{ _totalPackages }}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Downloads</div>
+                    <div class="stat-value">{{ _totalDownloads }}</div>
+                </div>
+            </div>
+        """)
+    }
+}

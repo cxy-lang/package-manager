@@ -1,0 +1,1139 @@
+module package_manager_db_sqlite
+
+import { Database, Statement } from "stdlib/sqlite.cxy"
+import { Vector } from "stdlib/vector.cxy"
+import { Time } from "stdlib/time.cxy"
+import {
+    Package,
+    Version,
+    Dependency,
+    PublishToken,
+    PackageMetadata,
+    PublishRequest,
+    DependencySpec,
+    PackageSummary,
+    VersionSummary,
+    PackageDetails,
+    PackageSearchResult
+} from "../models.cxy"
+import { PackageRepository } from "../repository.cxy"
+import { SCHEMA_STATEMENTS } from "./schema.cxy"
+import { bootstrapAdminToken as bootstrapToken } from "../api/admin.cxy"
+
+/// Error thrown during repository operations
+pub exception RepositoryError(msg: String = null) {
+    if (msg == null) {
+        msg = "Repository error".S
+    }
+    return msg.str()
+}
+
+/// SQLite implementation of PackageRepository.
+/// Holds a single database connection shared across all requests.
+pub class SQLitePackageRepository: PackageRepository {
+    _db: Database
+
+    @private
+    func `init`(db: Database) {
+        _db = &&db
+    }
+
+    /// Open a SQLite database at the given path.
+    /// Does not initialize schema - call initialize() after opening.
+    @static
+    func open(path: string): !SQLitePackageRepository {
+        var repo = SQLitePackageRepository(Database.open(path))
+        return &&repo
+    }
+
+    // -----------------------------------------------------------------------
+    // Lifecycle
+    // -----------------------------------------------------------------------
+
+    @override
+    func initialize(): !void {
+        // Enable foreign key constraints
+        _db.exec("PRAGMA foreign_keys = ON")
+
+        // Execute all schema statements
+        for stmt, _ in SCHEMA_STATEMENTS {
+            _db.exec(stmt)
+        }
+    }
+
+    @override
+    func bootstrapAdminToken(jwtSecret: __string): !bool {
+        return bootstrapToken(&_db, jwtSecret)
+    }
+
+    @override
+    func close(): void {
+        // Database deinit handles closing
+    }
+
+    // -----------------------------------------------------------------------
+    // Package operations
+    // -----------------------------------------------------------------------
+
+    @override
+    func searchPackages(
+        query: __string,
+        limit: i32,
+        offset: i32,
+        sort: __string
+    ): !PackageSearchResult {
+        var total: i64 = 0
+
+        // Get total count
+        if query.empty() {
+            var countStmt = _db.exec("SELECT COUNT(*) FROM packages")
+            if countStmt.next() {
+                total = countStmt.column[i64](0)
+            }
+        } else {
+            var countStmt = _db.exec(
+                "SELECT COUNT(*) FROM packages_fts WHERE packages_fts MATCH ?",
+                query
+            )
+            if countStmt.next() {
+                total = countStmt.column[i64](0)
+            }
+        }
+
+        // Get paginated results
+        var orderBy = _getSortClause(sort)
+        var packages = Vector[PackageSummary]()
+
+        if query.empty() {
+            var sql = "SELECT name, description, author, license, repository, ".S
+            sql << "(SELECT version FROM versions v WHERE v.package_id = p.id AND v.yanked = 0 "
+            sql << "ORDER BY v.published_at DESC LIMIT 1) as latest_version, "
+            sql << "total_downloads, updated_at FROM packages p ORDER BY "
+            sql << orderBy
+            sql << " LIMIT ? OFFSET ?"
+
+            var stmt = _db.exec(sql.str(), <i64>limit, <i64>offset)
+
+            while stmt.next() {
+                packages.push(PackageSummary{
+                    name:            String(stmt.column[string](0)),
+                    description:     String(stmt.column[string](1)),
+                    author:          String(stmt.column[string](2)),
+                    license:         String(stmt.column[string](3)),
+                    repository:      String(stmt.column[string](4)),
+                    latest_version:  String(stmt.column[string](5)),
+                    total_downloads: stmt.column[i64](6),
+                    updated_at:      String(stmt.column[string](7))
+                })
+            }
+        } else {
+            var sql = "SELECT p.name, p.description, p.author, p.license, p.repository, ".S
+            sql << "(SELECT version FROM versions v WHERE v.package_id = p.id AND v.yanked = 0 "
+            sql << "ORDER BY v.published_at DESC LIMIT 1) as latest_version, "
+            sql << "p.total_downloads, p.updated_at FROM packages p "
+            sql << "JOIN packages_fts fts ON fts.rowid = p.id WHERE packages_fts MATCH ? ORDER BY "
+            sql << orderBy
+            sql << " LIMIT ? OFFSET ?"
+
+            var stmt = _db.exec(sql.str(), query, <i64>limit, <i64>offset)
+
+            while stmt.next() {
+                packages.push(PackageSummary{
+                    name:            String(stmt.column[string](0)),
+                    description:     String(stmt.column[string](1)),
+                    author:          String(stmt.column[string](2)),
+                    license:         String(stmt.column[string](3)),
+                    repository:      String(stmt.column[string](4)),
+                    latest_version:  String(stmt.column[string](5)),
+                    total_downloads: stmt.column[i64](6),
+                    updated_at:      String(stmt.column[string](7))
+                })
+            }
+        }
+
+        return PackageSearchResult{ total: total, packages: &&packages }
+    }
+
+    @override
+    func getPackage(name: __string): !Optional[PackageDetails] {
+        // Get package
+        var pkgStmt = _db.exec("""
+            SELECT id, name, description, author, license, repository, homepage,
+                   readme, total_downloads, created_at, updated_at
+            FROM packages WHERE name = ?
+        """, name)
+
+        if !pkgStmt.next() {
+            return None[PackageDetails]()
+        }
+
+        var pkg = Package{
+            id:              pkgStmt.column[i64](0),
+            name:            String(pkgStmt.column[string](1)),
+            description:     String(pkgStmt.column[string](2)),
+            author:          String(pkgStmt.column[string](3)),
+            license:         String(pkgStmt.column[string](4)),
+            repository:      String(pkgStmt.column[string](5)),
+            homepage:        String(pkgStmt.column[string](6)),
+            readme:          String(pkgStmt.column[string](7)),
+            total_downloads: pkgStmt.column[i64](8),
+            created_at:      String(pkgStmt.column[string](9)),
+            updated_at:      String(pkgStmt.column[string](10))
+        }
+
+        // Get latest version
+        var latestOpt = getLatestVersion(name)
+        if !latestOpt {
+            return None[PackageDetails]()
+        }
+        var latest = *latestOpt
+
+        // Get dependencies for latest version
+        var deps = getDependencies(latest.id)
+
+        // Get all version summaries
+        var versions = listVersions(name)
+
+        return Some(PackageDetails{
+            pkg:          &&pkg,
+            latest:       &&latest,
+            dependencies: &&deps,
+            versions:     &&versions
+        })
+    }
+
+    @override
+    func getPackageSummary(name: __string): !Optional[PackageSummary] {
+        var stmt = _db.exec("""
+            SELECT name, description, author, license, repository,
+                   (SELECT version FROM versions v
+                    WHERE v.package_id = p.id AND v.yanked = 0
+                    ORDER BY v.published_at DESC LIMIT 1) as latest_version,
+                   total_downloads, updated_at
+            FROM packages p WHERE name = ?
+        """, name)
+
+        if !stmt.next() {
+            return None[PackageSummary]()
+        }
+
+        return Some(PackageSummary{
+            name:            String(stmt.column[string](0)),
+            description:     String(stmt.column[string](1)),
+            author:          String(stmt.column[string](2)),
+            license:         String(stmt.column[string](3)),
+            repository:      String(stmt.column[string](4)),
+            latest_version:  String(stmt.column[string](5)),
+            total_downloads: stmt.column[i64](6),
+            updated_at:      String(stmt.column[string](7))
+        })
+    }
+
+    @override
+    func packageExists(name: __string): bool {
+        var stmt = _db.exec("SELECT 1 FROM packages WHERE name = ? LIMIT 1", name) catch {
+            return false  // Treat DB error as "doesn't exist"
+        }
+        return stmt.next()
+    }
+
+    @override
+    func listPackages(limit: i32, offset: i32, sort: __string): !PackageSearchResult {
+        return searchPackages("", limit, offset, sort)
+    }
+
+    @override
+    func getRecentPackages(limit: i32): !Vector[PackageSummary] {
+        var packages = Vector[PackageSummary]()
+        var stmt = _db.exec("""
+            SELECT name, description, author, license, repository,
+                   (SELECT version FROM versions v
+                    WHERE v.package_id = p.id AND v.yanked = 0
+                    ORDER BY v.published_at DESC LIMIT 1) as latest_version,
+                   total_downloads, updated_at
+            FROM packages p
+            ORDER BY created_at DESC
+            LIMIT ?
+        """, <i64>limit)
+
+        while stmt.next() {
+            packages.push(PackageSummary{
+                name:            String(stmt.column[string](0)),
+                description:     String(stmt.column[string](1)),
+                author:          String(stmt.column[string](2)),
+                license:         String(stmt.column[string](3)),
+                repository:      String(stmt.column[string](4)),
+                latest_version:  String(stmt.column[string](5)),
+                total_downloads: stmt.column[i64](6),
+                updated_at:      String(stmt.column[string](7))
+            })
+        }
+
+        return &&packages
+    }
+
+    @override
+    func getPopularPackages(limit: i32): !Vector[PackageSummary] {
+        var packages = Vector[PackageSummary]()
+        var stmt = _db.exec("""
+            SELECT name, description, author, license, repository,
+                   (SELECT version FROM versions v
+                    WHERE v.package_id = p.id AND v.yanked = 0
+                    ORDER BY v.published_at DESC LIMIT 1) as latest_version,
+                   total_downloads, updated_at
+            FROM packages p
+            ORDER BY total_downloads DESC
+            LIMIT ?
+        """, <i64>limit)
+
+        while stmt.next() {
+            packages.push(PackageSummary{
+                name:            String(stmt.column[string](0)),
+                description:     String(stmt.column[string](1)),
+                author:          String(stmt.column[string](2)),
+                license:         String(stmt.column[string](3)),
+                repository:      String(stmt.column[string](4)),
+                latest_version:  String(stmt.column[string](5)),
+                total_downloads: stmt.column[i64](6),
+                updated_at:      String(stmt.column[string](7))
+            })
+        }
+
+        return &&packages
+    }
+
+    // -----------------------------------------------------------------------
+    // Version operations
+    // -----------------------------------------------------------------------
+
+    @override
+    func getVersion(packageName: __string, versionStr: __string): !Optional[Version] {
+        var stmt = _db.exec("""
+            SELECT v.id, v.package_id, v.version, v.tag, v."commit", v.checksum,
+                   v.yanked, v.downloads, v.published_at
+            FROM versions v
+            JOIN packages p ON p.id = v.package_id
+            WHERE p.name = ? AND v.version = ?
+        """, packageName, versionStr)
+
+        if !stmt.next() {
+            return None[Version]()
+        }
+
+        return Some(Version{
+            id:           stmt.column[i64](0),
+            package_id:   stmt.column[i64](1),
+            version:      String(stmt.column[string](2)),
+            tag:          String(stmt.column[string](3)),
+            commit:       String(stmt.column[string](4)),
+            checksum:     String(stmt.column[string](5)),
+            yanked:       stmt.column[i64](6) != 0,
+            downloads:    stmt.column[i64](7),
+            published_at: String(stmt.column[string](8))
+        })
+    }
+
+    @override
+    func listVersions(packageName: __string): !Vector[VersionSummary] {
+        var versions = Vector[VersionSummary]()
+        var stmt = _db.exec("""
+            SELECT v.version, v.tag, v."commit", v.published_at, v.downloads, v.yanked
+            FROM versions v
+            JOIN packages p ON p.id = v.package_id
+            WHERE p.name = ?
+            ORDER BY v.published_at DESC, v.version DESC
+        """, packageName)
+
+        while stmt.next() {
+            versions.push(VersionSummary{
+                version:      String(stmt.column[string](0)),
+                tag:          String(stmt.column[string](1)),
+                commit:       String(stmt.column[string](2)),
+                published_at: String(stmt.column[string](3)),
+                downloads:    stmt.column[i64](4),
+                yanked:       stmt.column[i64](5) != 0
+            })
+        }
+
+        return &&versions
+    }
+
+    @override
+    func getLatestVersion(packageName: __string): !Optional[Version] {
+        var stmt = _db.exec("""
+            SELECT v.id, v.package_id, v.version, v.tag, v."commit", v.checksum,
+                   v.yanked, v.downloads, v.published_at
+            FROM versions v
+            JOIN packages p ON p.id = v.package_id
+            WHERE p.name = ? AND v.yanked = 0
+            ORDER BY v.published_at DESC
+            LIMIT 1
+        """, packageName)
+
+        if !stmt.next() {
+            return None[Version]()
+        }
+
+        return Some(Version{
+            id:           stmt.column[i64](0),
+            package_id:   stmt.column[i64](1),
+            version:      String(stmt.column[string](2)),
+            tag:          String(stmt.column[string](3)),
+            commit:       String(stmt.column[string](4)),
+            checksum:     String(stmt.column[string](5)),
+            yanked:       stmt.column[i64](6) != 0,
+            downloads:    stmt.column[i64](7),
+            published_at: String(stmt.column[string](8))
+        })
+    }
+
+    // -----------------------------------------------------------------------
+    // Dependency operations
+    // -----------------------------------------------------------------------
+
+    @override
+    func getDependencies(versionId: i64): !Vector[Dependency] {
+        var deps = Vector[Dependency]()
+        var stmt = _db.exec("""
+            SELECT id, version_id, name, repository, version_constraint, is_dev
+            FROM dependencies
+            WHERE version_id = ?
+        """, versionId)
+
+        while stmt.next() {
+            deps.push(Dependency{
+                id:                 stmt.column[i64](0),
+                version_id:         stmt.column[i64](1),
+                name:               String(stmt.column[string](2)),
+                repository:         String(stmt.column[string](3)),
+                version_constraint: String(stmt.column[string](4)),
+                is_dev:             stmt.column[i64](5) != 0
+            })
+        }
+
+        return &&deps
+    }
+
+    @override
+    func getDependenciesForVersion(
+        packageName: __string,
+        versionStr: __string
+    ): !Vector[Dependency] {
+        var versionOpt = getVersion(packageName, versionStr)
+        if !versionOpt {
+            return Vector[Dependency]()
+        }
+        return getDependencies(versionOpt&.id)
+    }
+
+    // -----------------------------------------------------------------------
+    // Publishing operations
+    // -----------------------------------------------------------------------
+
+    @override
+    func publishPackage(req: &PublishRequest): !i64 {
+        var timestamp = _getCurrentTimestamp()
+
+        // Check if package exists
+        var existingStmt = _db.exec(
+            "SELECT id, repository FROM packages WHERE name = ?",
+            req.metadata.name.__str()
+        )
+
+        var packageId: i64
+
+        if existingStmt.next() {
+            // Package exists - verify repository matches
+            packageId = existingStmt.column[i64](0)
+            var existingRepo = String(existingStmt.column[string](1))
+
+            if existingRepo != req.repository {
+                raise RepositoryError("Package name already claimed by different repository".S)
+            }
+
+            // Update package metadata
+            var homepage = req.metadata.homepage == null ? "" : req.metadata.homepage.str()
+            var readme = req.readme == null ? "" : req.readme.str()
+
+            _db.exec("""
+                UPDATE packages
+                SET description = ?, author = ?, license = ?, homepage = ?,
+                    readme = ?, updated_at = ?
+                WHERE id = ?
+            """,
+                req.metadata.description.str(),
+                req.metadata.author.str(),
+                req.metadata.license.str(),
+                homepage,
+                readme,
+                timestamp.str(),
+                packageId
+            )
+        } else {
+            // Insert new package
+            var homepage = req.metadata.homepage == null ? "" : req.metadata.homepage.str()
+            var readme = req.readme == null ? "" : req.readme.str()
+
+            _db.exec("""
+                INSERT INTO packages (name, description, author, license, repository,
+                                     homepage, readme, total_downloads, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+            """,
+                req.metadata.name.str(),
+                req.metadata.description.str(),
+                req.metadata.author.str(),
+                req.metadata.license.str(),
+                req.repository.str(),
+                homepage,
+                readme,
+                timestamp.str(),
+                timestamp.str()
+            )
+
+            // Get last inserted ID
+            var idStmt = _db.exec("SELECT last_insert_rowid()")
+            idStmt.next()
+            packageId = idStmt.column[i64](0)
+        }
+
+        // Check if version already exists
+        var versionCheckStmt = _db.exec(
+            "SELECT 1 FROM versions WHERE package_id = ? AND version = ?",
+            packageId,
+            req.metadata.version.str()
+        )
+
+        if versionCheckStmt.next() {
+            raise RepositoryError("Version already exists".S)
+        }
+
+        // Insert version
+        _db.exec("""
+            INSERT INTO versions (package_id, version, tag, "commit", checksum,
+                                 yanked, downloads, published_at)
+            VALUES (?, ?, ?, ?, ?, 0, 0, ?)
+        """,
+            packageId,
+            req.metadata.version.str(),
+            req.tag.str(),
+            req.commit.str(),
+            req.checksum.str(),
+            timestamp.str()
+        )
+
+        // Get version ID
+        var versionIdStmt = _db.exec("SELECT last_insert_rowid()")
+        versionIdStmt.next()
+        var versionId = versionIdStmt.column[i64](0)
+
+        // Insert dependencies
+        for dep, _ in req.dependencies {
+            _db.exec("""
+                INSERT INTO dependencies (version_id, name, repository, version_constraint, is_dev)
+                VALUES (?, ?, ?, ?, ?)
+            """,
+                versionId,
+                dep.name.__str(),
+                dep.repository.__str(),
+                dep.version_constraint.__str(),
+                <i64>(dep.is_dev ? 1 : 0)
+            )
+        }
+
+        return packageId
+    }
+
+    @override
+    func yankVersion(packageName: __string, versionStr: __string): !void {
+        _db.exec("""
+            UPDATE versions
+            SET yanked = 1
+            WHERE package_id = (SELECT id FROM packages WHERE name = ?)
+              AND version = ?
+        """, packageName, versionStr)
+    }
+
+    @override
+    func unyankVersion(packageName: __string, versionStr: __string): !void {
+        _db.exec("""
+            UPDATE versions
+            SET yanked = 0
+            WHERE package_id = (SELECT id FROM packages WHERE name = ?)
+              AND version = ?
+        """, packageName, versionStr)
+    }
+
+    // -----------------------------------------------------------------------
+    // Download tracking
+    // -----------------------------------------------------------------------
+
+    @override
+    func recordDownload(packageName: __string, versionStr: __string): void {
+        // Increment version downloads (fire-and-forget)
+        _db.exec("""
+            UPDATE versions
+            SET downloads = downloads + 1
+            WHERE package_id = (SELECT id FROM packages WHERE name = ?)
+              AND version = ?
+        """, packageName, versionStr) catch discard
+
+        // Increment package total downloads
+        _db.exec("""
+            UPDATE packages
+            SET total_downloads = total_downloads + 1
+            WHERE name = ?
+        """, packageName) catch discard
+    }
+
+    // -----------------------------------------------------------------------
+    // Authentication
+    // -----------------------------------------------------------------------
+
+    @override
+    func validateToken(tokenHash: __string): bool {
+        var stmt = _db.exec(
+            "SELECT 1 FROM publish_tokens WHERE token_hash = ?",
+            tokenHash
+        ) catch {
+            return false  // Fail closed on DB error
+        }
+
+        var exists = stmt.next()
+
+        if exists {
+            // Update last_used timestamp (best effort)
+            var timestamp = _getCurrentTimestamp()
+            _db.exec(
+                "UPDATE publish_tokens SET last_used = ? WHERE token_hash = ?",
+                timestamp.str(),
+                tokenHash
+            ) catch discard
+        }
+
+        return exists
+    }
+
+    @override
+    func createToken(tokenHash: __string, label: __string): !i64 {
+        var timestamp = _getCurrentTimestamp()
+        _db.exec("""
+            INSERT INTO publish_tokens (token_hash, label, created_at, last_used)
+            VALUES (?, ?, ?, NULL)
+        """, tokenHash, label, timestamp.str())
+
+        var idStmt = _db.exec("SELECT last_insert_rowid()")
+        idStmt.next()
+        return idStmt.column[i64](0)
+    }
+
+    // -----------------------------------------------------------------------
+    // Statistics
+    // -----------------------------------------------------------------------
+
+    @override
+    func getTotalPackageCount(): i64 {
+        var stmt = _db.exec("SELECT COUNT(*) FROM packages") catch {
+            return 0  // Return 0 on error
+        }
+        if stmt.next() {
+            return stmt.column[i64](0) catch 0
+        }
+        return 0
+    }
+
+    @override
+    func getTotalDownloadCount(): i64 {
+        var stmt = _db.exec("SELECT SUM(total_downloads) FROM packages") catch {
+            return 0  // Return 0 on error
+        }
+        if stmt.next() {
+            return stmt.column[i64](0) catch 0
+        }
+        return 0
+    }
+
+    // -----------------------------------------------------------------------
+    // Helper methods
+    // -----------------------------------------------------------------------
+
+    func _getSortClause(sort: __string): String {
+        if sort == "downloads" {
+            return "p.total_downloads DESC".S
+        } else if sort == "updated" {
+            return "p.updated_at DESC".S
+        } else if sort == "name" {
+            return "p.name ASC".S
+        } else {
+            // Default: relevance (for search) or updated (for list)
+            return "p.updated_at DESC".S
+        }
+    }
+
+    func _getCurrentTimestamp(): String {
+        // ISO 8601 timestamp: YYYY-MM-DDTHH:MM:SSZ
+        var ts = Time()
+        var result = String()
+        ts.format("%Y-%m-%dT%H:%M:%SZ", &result)
+        return &&result
+    }
+}
+
+// ===========================================================================
+// Tests
+// ===========================================================================
+
+test "initialize - creates schema" {
+    var repo = SQLitePackageRepository.open(":memory:")
+    repo.initialize()
+
+    // Should not throw on second call (idempotent)
+    repo.initialize()
+
+    ok!(repo.getTotalPackageCount() == 0)
+    ok!(repo.getTotalDownloadCount() == 0)
+}
+
+test "publishPackage - creates new package" {
+    var repo = SQLitePackageRepository.open(":memory:")
+    repo.initialize()
+
+    var metadata = PackageMetadata{
+        name:        "test-pkg".S,
+        version:     "0.1.0".S,
+        description: "A test package".S,
+        author:      "Test Author".S,
+        license:     "MIT".S,
+        repository:  "https://github.com/test/test.git".S,
+        homepage:    "https://test.com".S
+    }
+
+    var deps = Vector[DependencySpec]()
+    var request = PublishRequest{
+        repository:   "https://github.com/test/test.git".S,
+        tag:          "v0.1.0".S,
+        commit:       "abc123".S,
+        checksum:     "sha256:test".S,
+        metadata:     &&metadata,
+        readme:       "# Test Package".S,
+        dependencies: &&deps
+    }
+
+    var pkgId = repo.publishPackage(&request)
+    ok!(pkgId > 0)
+    ok!(repo.getTotalPackageCount() == 1)
+}
+
+test "publishPackage - updates existing package" {
+    var repo = SQLitePackageRepository.open(":memory:")
+    repo.initialize()
+
+    var metadata1 = PackageMetadata{
+        name:        "test-pkg".S,
+        version:     "0.1.0".S,
+        description: "Old description".S,
+        author:      "Author".S,
+        license:     "MIT".S,
+        repository:  "https://github.com/test/test.git".S,
+        homepage:    "https://test.com".S
+    }
+
+    var deps = Vector[DependencySpec]()
+    var request1 = PublishRequest{
+        repository:   "https://github.com/test/test.git".S,
+        tag:          "v0.1.0".S,
+        commit:       "abc123".S,
+        checksum:     "sha256:test1".S,
+        metadata:     &&metadata1,
+        readme:       "# Test".S,
+        dependencies: deps
+    }
+
+    repo.publishPackage(&request1)
+
+    // Publish new version
+    var metadata2 = PackageMetadata{
+        name:        "test-pkg".S,
+        version:     "0.2.0".S,
+        description: "New description".S,
+        author:      "Author".S,
+        license:     "MIT".S,
+        repository:  "https://github.com/test/test.git".S,
+        homepage:    "https://test.com".S
+    }
+
+    var request2 = PublishRequest{
+        repository:   "https://github.com/test/test.git".S,
+        tag:          "v0.2.0".S,
+        commit:       "def456".S,
+        checksum:     "sha256:test2".S,
+        metadata:     &&metadata2,
+        readme:       "# Test Updated".S,
+        dependencies: &&deps
+    }
+
+    repo.publishPackage(&request2)
+
+    // Still only one package (updated)
+    ok!(repo.getTotalPackageCount() == 1)
+
+    // But two versions
+    var versions = repo.listVersions("test-pkg")
+    ok!(versions.size() == 2)
+}
+
+test "getPackage - returns package details" {
+    var repo = SQLitePackageRepository.open(":memory:")
+    repo.initialize()
+
+    var metadata = PackageMetadata{
+        name:        "test-pkg".S,
+        version:     "1.0.0".S,
+        description: "Test".S,
+        author:      "Author".S,
+        license:     "MIT".S,
+        repository:  "https://github.com/test/test.git".S,
+        homepage:    "https://test.com".S
+    }
+
+    var deps = Vector[DependencySpec]()
+    var request = PublishRequest{
+        repository:   "https://github.com/test/test.git".S,
+        tag:          "v1.0.0".S,
+        commit:       "abc123".S,
+        checksum:     "sha256:test".S,
+        metadata:     &&metadata,
+        readme:       "# Test Package\n\nReadme content".S,
+        dependencies: &&deps
+    }
+
+    repo.publishPackage(&request)
+
+    var detailsOpt = repo.getPackage("test-pkg")
+    ok!(!!detailsOpt)
+
+    var details = *detailsOpt
+    ok!(details.pkg.name == "test-pkg")
+    ok!(details.pkg.description == "Test")
+    ok!(details.pkg.readme == "# Test Package\n\nReadme content")
+    ok!(details.latest.version == "1.0.0")
+    ok!(details.versions.size() == 1)
+}
+
+test "getPackage - returns None for nonexistent package" {
+    var repo = SQLitePackageRepository.open(":memory:")
+    repo.initialize()
+
+    var detailsOpt = repo.getPackage("nonexistent")
+    ok!(!detailsOpt)
+}
+
+test "packageExists - returns true for existing package" {
+    var repo = SQLitePackageRepository.open(":memory:")
+    repo.initialize()
+
+    var metadata = PackageMetadata{
+        name:        "exists".S,
+        version:     "1.0.0".S,
+        description: "Test".S,
+        author:      "Author".S,
+        license:     "MIT".S,
+        repository:  "https://github.com/test/test.git".S,
+        homepage:    "".S
+    }
+
+    var deps = Vector[DependencySpec]()
+    var request = PublishRequest{
+        repository:   "https://github.com/test/test.git".S,
+        tag:          "v1.0.0".S,
+        commit:       "abc123".S,
+        checksum:     "sha256:test".S,
+        metadata:     &&metadata,
+        readme:       "".S,
+        dependencies: &&deps
+    }
+
+    repo.publishPackage(&request)
+
+    ok!(repo.packageExists("exists"))
+    ok!(!repo.packageExists("nonexistent"))
+}
+
+test "searchPackages - empty query returns all packages" {
+    var repo = SQLitePackageRepository.open(":memory:")
+    repo.initialize()
+
+    // Publish two packages
+    for i in 0..2 {
+        var name = f"pkg-{i}"
+        var metadata = PackageMetadata{
+            name:        &&name,
+            version:     "1.0.0".S,
+            description: "Description".S,
+            author:      "Author".S,
+            license:     "MIT".S,
+            repository:  "https://github.com/test/test.git".S,
+            homepage:    "".S
+        }
+
+        var deps = Vector[DependencySpec]()
+        var request = PublishRequest{
+            repository:   "https://github.com/test/test.git".S,
+            tag:          "v1.0.0".S,
+            commit:       "abc123".S,
+            checksum:     "sha256:test".S,
+            metadata:     &&metadata,
+            readme:       "".S,
+            dependencies: &&deps
+        }
+
+        repo.publishPackage(&request)
+    }
+
+    var result = repo.searchPackages("", 10, 0, "name")
+    ok!(result.total == 2)
+    ok!(result.packages.size() == 2)
+}
+
+test "searchPackages - with query filters results" {
+    var repo = SQLitePackageRepository.open(":memory:")
+    repo.initialize()
+
+    var metadata = PackageMetadata{
+        name:        "json-parser".S,
+        version:     "1.0.0".S,
+        description: "A JSON parsing library".S,
+        author:      "Alice".S,
+        license:     "MIT".S,
+        repository:  "https://github.com/test/test.git".S,
+        homepage:    "".S
+    }
+
+    var deps = Vector[DependencySpec]()
+    var request = PublishRequest{
+        repository:   "https://github.com/test/test.git".S,
+        tag:          "v1.0.0".S,
+        commit:       "abc123".S,
+        checksum:     "sha256:test".S,
+        metadata:     &&metadata,
+        readme:       "".S,
+        dependencies: &&deps
+    }
+
+    repo.publishPackage(&request)
+
+    // Should find by name
+    var result = repo.searchPackages("json", 10, 0, "name")
+    ok!(result.total == 1)
+    ok!(result.packages.[0].name == "json-parser")
+}
+
+test "recordDownload - increments counters" {
+    var repo = SQLitePackageRepository.open(":memory:")
+    repo.initialize()
+
+    var metadata = PackageMetadata{
+        name:        "test".S,
+        version:     "1.0.0".S,
+        description: "Test".S,
+        author:      "Author".S,
+        license:     "MIT".S,
+        repository:  "https://github.com/test/test.git".S,
+        homepage:    "".S
+    }
+
+    var deps = Vector[DependencySpec]()
+    var request = PublishRequest{
+        repository:   "https://github.com/test/test.git".S,
+        tag:          "v1.0.0".S,
+        commit:       "abc123".S,
+        checksum:     "sha256:test".S,
+        metadata:     &&metadata,
+        readme:       "".S,
+        dependencies: &&deps
+    }
+
+    repo.publishPackage(&request)
+
+    ok!(repo.getTotalDownloadCount() == 0)
+
+    repo.recordDownload("test", "1.0.0")
+    ok!(repo.getTotalDownloadCount() == 1)
+
+    repo.recordDownload("test", "1.0.0")
+    ok!(repo.getTotalDownloadCount() == 2)
+}
+
+test "yankVersion - marks version as yanked" {
+    var repo = SQLitePackageRepository.open(":memory:")
+    repo.initialize()
+
+    var metadata = PackageMetadata{
+        name:        "test".S,
+        version:     "1.0.0".S,
+        description: "Test".S,
+        author:      "Author".S,
+        license:     "MIT".S,
+        repository:  "https://github.com/test/test.git".S,
+        homepage:    "".S
+    }
+
+    var deps = Vector[DependencySpec]()
+    var request = PublishRequest{
+        repository:   "https://github.com/test/test.git".S,
+        tag:          "v1.0.0".S,
+        commit:       "abc123".S,
+        checksum:     "sha256:test".S,
+        metadata:     &&metadata,
+        readme:       "".S,
+        dependencies: &&deps
+    }
+
+    repo.publishPackage(&request)
+
+    var versionOpt = repo.getVersion("test", "1.0.0")
+    ok!(!!versionOpt)
+    ok!(!versionOpt&.yanked)
+
+    repo.yankVersion("test", "1.0.0")
+
+    var yankedOpt = repo.getVersion("test", "1.0.0")
+    ok!(!!yankedOpt)
+    ok!(yankedOpt&.yanked)
+}
+
+test "validateToken - returns false for nonexistent token" {
+    var repo = SQLitePackageRepository.open(":memory:")
+    repo.initialize()
+
+    ok!(!repo.validateToken("nonexistent"))
+}
+
+test "createToken and validateToken - creates and validates token" {
+    var repo = SQLitePackageRepository.open(":memory:")
+    repo.initialize()
+
+    var tokenId = repo.createToken("hash123", "test-token")
+    ok!(tokenId > 0)
+
+    ok!(repo.validateToken("hash123"))
+    ok!(!repo.validateToken("wrong-hash"))
+}
+
+test "getDependencies - returns dependencies for version" {
+    var repo = SQLitePackageRepository.open(":memory:")
+    repo.initialize()
+
+    var deps = Vector[DependencySpec]()
+    deps.push(DependencySpec{
+        name:               "dep1".S,
+        repository:         "https://github.com/test/dep1.git".S,
+        version_constraint: "^1.0.0".S,
+        is_dev:             false
+    })
+    deps.push(DependencySpec{
+        name:               "dep2".S,
+        repository:         "https://github.com/test/dep2.git".S,
+        version_constraint: "*".S,
+        is_dev:             true
+    })
+
+    var metadata = PackageMetadata{
+        name:        "test".S,
+        version:     "1.0.0".S,
+        description: "Test".S,
+        author:      "Author".S,
+        license:     "MIT".S,
+        repository:  "https://github.com/test/test.git".S,
+        homepage:    "".S
+    }
+
+    var request = PublishRequest{
+        repository:   "https://github.com/test/test.git".S,
+        tag:          "v1.0.0".S,
+        commit:       "abc123".S,
+        checksum:     "sha256:test".S,
+        metadata:     &&metadata,
+        readme:       "".S,
+        dependencies: &&deps
+    }
+
+    repo.publishPackage(&request)
+
+    var retrievedDeps = repo.getDependenciesForVersion("test", "1.0.0")
+    ok!(retrievedDeps.size() == 2)
+    ok!(retrievedDeps.[0].name == "dep1")
+    ok!(retrievedDeps.[1].name == "dep2")
+    ok!(!retrievedDeps.[0].is_dev)
+    ok!(retrievedDeps.[1].is_dev)
+}
+
+test "getRecentPackages - returns recent packages" {
+    var repo = SQLitePackageRepository.open(":memory:")
+    repo.initialize()
+
+    // Publish multiple packages
+    for i in 0..5 {
+        var name = f"pkg-{i}"
+        var metadata = PackageMetadata{
+            name:        &&name,
+            version:     "1.0.0".S,
+            description: "Test".S,
+            author:      "Author".S,
+            license:     "MIT".S,
+            repository:  "https://github.com/test/test.git".S,
+            homepage:    "".S
+        }
+
+        var deps = Vector[DependencySpec]()
+        var request = PublishRequest{
+            repository:   "https://github.com/test/test.git".S,
+            tag:          "v1.0.0".S,
+            commit:       "abc123".S,
+            checksum:     "sha256:test".S,
+            metadata:     &&metadata,
+            readme:       "".S,
+            dependencies: &&deps
+        }
+
+        repo.publishPackage(&request)
+    }
+
+    var recent = repo.getRecentPackages(3)
+    ok!(recent.size() == 3)
+}
+
+test "listVersions - returns all versions sorted" {
+    var repo = SQLitePackageRepository.open(":memory:")
+    repo.initialize()
+
+    // Publish multiple versions
+    var versions = ["0.1.0", "0.2.0", "1.0.0"]
+    for ver, idx : versions {
+        var metadata = PackageMetadata{
+            name:        "test".S,
+            version:     String(ver),
+            description: "Test".S,
+            author:      "Author".S,
+            license:     "MIT".S,
+            repository:  "https://github.com/test/test.git".S,
+            homepage:    "".S
+        }
+
+        var request = PublishRequest{
+            repository:   "https://github.com/test/test.git".S,
+            tag:          f"v{ver}",
+            commit:       "abc123".S,
+            checksum:     "sha256:test".S,
+            metadata:     &&metadata,
+            readme:       "".S,
+            dependencies: Vector[DependencySpec]()
+        }
+
+        repo.publishPackage(&request)
+    }
+
+    var allVersions = repo.listVersions("test")
+    ok!(allVersions.size() == 3)
+    // Should be sorted newest first
+    ok!(allVersions.[0].version == "1.0.0")
+}

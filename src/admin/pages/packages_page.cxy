@@ -1,0 +1,128 @@
+module packages_page
+
+import plugin "cxyml" as cxyml
+import { View } from "@cxyml"
+import { Vector } from "stdlib/vector.cxy"
+import { AdminLayout } from "../components/admin_layout.cxy"
+import { PackageSummary } from "../../models.cxy"
+
+// Content component - just the page content without layout
+class PackagesContent: View {
+    - _packages: Vector[PackageSummary];
+    - _query: String;
+    - _total: i64;
+
+    func `init`(packages: Vector[PackageSummary], query: String, total: i64) {
+        _packages = &&packages
+        _query = &&query
+        _total = total
+    }
+
+    @override
+    func render(os: &OutputStream): void {
+        cxyml::render("""
+            <div class="admin-container">
+                <div class="page-header">
+                    <h1>Package Management</h1>
+                    <p>Browse and manage registry packages</p>
+                </div>
+
+                <div class="admin-content">
+                    <form method="GET" action="/admin/packages" style="margin-bottom: 1.5rem;">
+                        <div class="form-group">
+                            <label for="search" class="form-label">Search Packages</label>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <input
+                                    type="text"
+                                    id="search"
+                                    name="q"
+                                    class="form-input"
+                                    placeholder="Search by name, description, or author..."
+                                    value="{{ _query }}"
+                                    style="flex: 1;"
+                                />
+                                <button type="submit" class="btn btn-primary">Search</button>
+                            </div>
+                        </div>
+                    </form>
+
+                    <p style="color: var(--admin-text-muted); margin-bottom: 1rem;">
+                        Found {{ _total }} package(s)
+                    </p>
+
+                    {{ if _packages.empty() }}
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📦</div>
+                            <p class="empty-state-text">No packages found</p>
+                            {{ if _query.size() > 0 }}
+                                <p style="margin-top: 0.5rem;">
+                                    <a href="/admin/packages" style="color: var(--admin-primary);">Clear search</a>
+                                </p>
+                            {{ /if }}
+                        </div>
+                    {{ else }}
+                        <div class="table-wrapper">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Package</th>
+                                        <th>Description</th>
+                                        <th>Version</th>
+                                        <th>Author</th>
+                                        <th>Downloads</th>
+                                        <th>Updated</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {{ for pkg in _packages }}
+                                        <tr>
+                                            <td>
+                                                <a href="/packages/{{ pkg.0.name }}" target="_blank" style="font-weight: 600;">
+                                                    {{ pkg.0.name }}
+                                                </a>
+                                            </td>
+                                            <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                                {{ pkg.0.description }}
+                                            </td>
+                                            <td>
+                                                <span class="badge badge-info">{{ pkg.0.latest_version }}</span>
+                                            </td>
+                                            <td>{{ pkg.0.author }}</td>
+                                            <td>{{ pkg.0.total_downloads }}</td>
+                                            <td style="font-size: 0.875rem; color: var(--admin-text-muted);">
+                                                {{ pkg.0.updated_at }}
+                                            </td>
+                                            <td>
+                                                <div class="action-buttons">
+                                                    <a href="/admin/packages/{{ pkg.0.name }}" class="btn btn-sm btn-secondary">
+                                                        Manage
+                                                    </a>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    {{ /for }}
+                                </tbody>
+                            </table>
+                        </div>
+                    {{ /if }}
+                </div>
+            </div>
+        """)
+    }
+}
+
+// Page component - wraps content with layout
+pub class PackagesPage: View {
+    - _content: PackagesContent;
+
+    func `init`(packages: Vector[PackageSummary], query: String, total: i64) {
+        _content = PackagesContent(&&packages, &&query, total)
+    }
+
+    @override
+    func render(os: &OutputStream): void {
+        var layout = AdminLayout("Package Management".S, &_content)
+        layout.render(os)
+    }
+}

@@ -1,0 +1,57 @@
+module login_page
+
+import plugin "cxyml" as cxyml
+import { View } from "@cxyml"
+
+pub class LoginPage: View {
+    func `init`() {}
+
+    @override
+    func render(os: &OutputStream): void {
+        cxyml::render("""
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+                <title>Admin Login - Cxy Registry</title>
+                <link rel="stylesheet" href="/static/admin.css" />
+                <script src="/static/admin.js" defer></script>
+            </head>
+            <body>
+                <div class="login-wrapper">
+                    <div class="login-card">
+                        <div class="login-header">
+                            <h1>📦 Admin Login</h1>
+                            <p>Enter your admin token to access the registry management panel</p>
+                        </div>
+
+                        <div id="login-error" class="form-error" style="display:none"></div>
+
+                        <form id="login-form">
+                            <div class="form-group">
+                                <label for="admin-token" class="form-label">Admin Token</label>
+                                <input
+                                    type="password"
+                                    id="admin-token"
+                                    name="token"
+                                    class="form-input"
+                                    placeholder="Enter your admin JWT token"
+                                    required
+                                    autocomplete="off"
+                                />
+                                <p class="form-help">
+                                    This token is generated on first server startup and printed to the console.
+                                </p>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary btn-block">
+                                Login
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </body>
+            </html>
+        """)
+    }
+}

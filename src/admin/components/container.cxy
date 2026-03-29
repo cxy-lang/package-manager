@@ -1,0 +1,17 @@
+module container
+
+import plugin "cxyml" as cxyml
+import { View } from "@cxyml"
+
+pub class Container: View {
+    - _content: &View;
+
+    func `init`(content: &View) {
+        _content = content
+    }
+
+    @override
+    func render(os: &OutputStream): void {
+        _content.render(os)
+    }
+}

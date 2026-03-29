@@ -1,0 +1,133 @@
+module package_manager_db_schema
+
+/// SQL schema for the package registry database.
+/// Designed to be forward-compatible with PostgreSQL (no SQLite-specific syntax in core schema).
+
+pub const CREATE_PACKAGES_TABLE = """
+CREATE TABLE IF NOT EXISTS packages (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    name             TEXT    NOT NULL UNIQUE,
+    description      TEXT,
+    author           TEXT,
+    license          TEXT,
+    repository       TEXT    NOT NULL,
+    homepage         TEXT,
+    readme           TEXT,
+    total_downloads  INTEGER NOT NULL DEFAULT 0,
+    created_at       TEXT    NOT NULL,
+    updated_at       TEXT    NOT NULL
+)
+"""
+
+pub const CREATE_PACKAGES_NAME_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_packages_name ON packages (name)
+"""
+
+pub const CREATE_PACKAGES_UPDATED_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_packages_updated ON packages (updated_at DESC)
+"""
+
+pub const CREATE_PACKAGES_DOWNLOADS_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_packages_downloads ON packages (total_downloads DESC)
+"""
+
+pub const CREATE_VERSIONS_TABLE = "CREATE TABLE IF NOT EXISTS versions (id INTEGER PRIMARY KEY AUTOINCREMENT, package_id INTEGER NOT NULL, version TEXT NOT NULL, tag TEXT, \"commit\" TEXT NOT NULL, checksum TEXT NOT NULL, yanked INTEGER NOT NULL DEFAULT 0, downloads INTEGER NOT NULL DEFAULT 0, published_at TEXT NOT NULL, UNIQUE (package_id, version))"
+
+pub const CREATE_VERSIONS_PACKAGE_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_versions_package ON versions (package_id)
+"""
+
+pub const CREATE_VERSIONS_PUBLISHED_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_versions_published ON versions (published_at DESC)
+"""
+
+pub const CREATE_DEPENDENCIES_TABLE = "CREATE TABLE IF NOT EXISTS dependencies (id INTEGER PRIMARY KEY AUTOINCREMENT, version_id INTEGER NOT NULL, name TEXT NOT NULL, repository TEXT, version_constraint TEXT NOT NULL DEFAULT '*', is_dev INTEGER NOT NULL DEFAULT 0)"
+
+pub const CREATE_DEPENDENCIES_VERSION_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_deps_version ON dependencies (version_id)
+"""
+
+pub const CREATE_PUBLISH_TOKENS_TABLE = """
+CREATE TABLE IF NOT EXISTS publish_tokens (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    token_hash TEXT    NOT NULL UNIQUE,
+    label      TEXT,
+    created_at TEXT    NOT NULL,
+    last_used  TEXT
+)
+"""
+
+pub const CREATE_PUBLISH_TOKENS_HASH_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_tokens_hash ON publish_tokens (token_hash)
+"""
+
+pub const CREATE_ADMIN_TOKEN_TABLE = """
+CREATE TABLE IF NOT EXISTS admin_token (
+    id         INTEGER PRIMARY KEY CHECK (id = 1),
+    token      TEXT    NOT NULL,
+    created_at TEXT    NOT NULL,
+    last_used  TEXT
+)
+"""
+
+/// Full-text search virtual table (SQLite FTS5).
+/// Content is sourced from the packages table.
+pub const CREATE_PACKAGES_FTS = """
+CREATE VIRTUAL TABLE IF NOT EXISTS packages_fts USING fts5 (
+    name,
+    description,
+    author,
+    content = packages,
+    content_rowid = id
+)
+"""
+
+/// Trigger to keep FTS index in sync when packages are inserted.
+pub const CREATE_PACKAGES_FTS_INSERT_TRIGGER = """
+CREATE TRIGGER IF NOT EXISTS packages_fts_insert AFTER INSERT ON packages
+BEGIN
+    INSERT INTO packages_fts (rowid, name, description, author)
+    VALUES (NEW.id, NEW.name, NEW.description, NEW.author);
+END
+"""
+
+/// Trigger to keep FTS index in sync when packages are updated.
+pub const CREATE_PACKAGES_FTS_UPDATE_TRIGGER = """
+CREATE TRIGGER IF NOT EXISTS packages_fts_update AFTER UPDATE ON packages
+BEGIN
+    UPDATE packages_fts
+    SET name = NEW.name,
+        description = NEW.description,
+        author = NEW.author
+    WHERE rowid = NEW.id;
+END
+"""
+
+/// Trigger to keep FTS index in sync when packages are deleted.
+pub const CREATE_PACKAGES_FTS_DELETE_TRIGGER = """
+CREATE TRIGGER IF NOT EXISTS packages_fts_delete AFTER DELETE ON packages
+BEGIN
+    DELETE FROM packages_fts WHERE rowid = OLD.id;
+END
+"""
+
+/// All schema creation statements in order.
+/// Execute these sequentially to initialize the database.
+pub const SCHEMA_STATEMENTS = [
+    CREATE_PACKAGES_TABLE,
+    CREATE_PACKAGES_NAME_INDEX,
+    CREATE_PACKAGES_UPDATED_INDEX,
+    CREATE_PACKAGES_DOWNLOADS_INDEX,
+    CREATE_VERSIONS_TABLE,
+    CREATE_VERSIONS_PACKAGE_INDEX,
+    CREATE_VERSIONS_PUBLISHED_INDEX,
+    CREATE_DEPENDENCIES_TABLE,
+    CREATE_DEPENDENCIES_VERSION_INDEX,
+    CREATE_PUBLISH_TOKENS_TABLE,
+    CREATE_PUBLISH_TOKENS_HASH_INDEX,
+    CREATE_ADMIN_TOKEN_TABLE,
+    CREATE_PACKAGES_FTS,
+    CREATE_PACKAGES_FTS_INSERT_TRIGGER,
+    CREATE_PACKAGES_FTS_UPDATE_TRIGGER,
+    CREATE_PACKAGES_FTS_DELETE_TRIGGER
+]

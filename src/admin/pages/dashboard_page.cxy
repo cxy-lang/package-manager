@@ -1,0 +1,89 @@
+module dashboard_page
+
+import plugin "cxyml" as cxyml
+import { View } from "@cxyml"
+import { Vector } from "stdlib/vector.cxy"
+import { AdminLayout } from "../components/admin_layout.cxy"
+import { StatsPanel } from "../components/stats_panel.cxy"
+import { PackageSummary } from "../../models.cxy"
+
+// Content component - just the page content without layout
+class DashboardContent: View {
+    - _totalPackages: i64;
+    - _totalDownloads: i64;
+    - _recentPackages: Vector[PackageSummary];
+
+    func `init`(totalPackages: i64, totalDownloads: i64, recentPackages: Vector[PackageSummary]) {
+        _totalPackages = totalPackages
+        _totalDownloads = totalDownloads
+        _recentPackages = &&recentPackages
+    }
+
+    @override
+    func render(os: &OutputStream): void {
+        cxyml::render("""
+            <div class="admin-container">
+                <div class="page-header">
+                    <h1>Dashboard</h1>
+                    <p>Overview of the Cxy package registry</p>
+                </div>
+
+                <StatsPanel totalPackages={{ _totalPackages }} totalDownloads={{ _totalDownloads }} />
+
+                <div class="admin-content">
+                    <div class="card-header">Recently Published Packages</div>
+                    {{ if _recentPackages.empty() }}
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📦</div>
+                            <p class="empty-state-text">No packages published yet</p>
+                        </div>
+                    {{ else }}
+                        <div class="table-wrapper">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Package</th>
+                                        <th>Version</th>
+                                        <th>Author</th>
+                                        <th>Downloads</th>
+                                        <th>Published</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {{ for pkg in _recentPackages }}
+                                        <tr>
+                                            <td>
+                                                <a href="/packages/{{ pkg.0.name }}">{{ pkg.0.name }}</a>
+                                            </td>
+                                            <td>
+                                                <span class="badge badge-info">{{ pkg.0.latest_version }}</span>
+                                            </td>
+                                            <td>{{ pkg.0.author }}</td>
+                                            <td>{{ pkg.0.total_downloads }}</td>
+                                            <td>{{ pkg.0.updated_at }}</td>
+                                        </tr>
+                                    {{ /for }}
+                                </tbody>
+                            </table>
+                        </div>
+                    {{ /if }}
+                </div>
+            </div>
+        """)
+    }
+}
+
+// Page component - wraps content with layout
+pub class DashboardPage: View {
+    - _content: DashboardContent;
+
+    func `init`(totalPackages: i64, totalDownloads: i64, recentPackages: Vector[PackageSummary]) {
+        _content = DashboardContent(totalPackages, totalDownloads, &&recentPackages)
+    }
+
+    @override
+    func render(os: &OutputStream): void {
+        var layout = AdminLayout("Dashboard".S, &_content)
+        layout.render(os)
+    }
+}

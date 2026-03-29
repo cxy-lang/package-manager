@@ -1,0 +1,28 @@
+module admin_navbar
+
+import plugin "cxyml" as cxyml
+import { View } from "@cxyml"
+
+pub class AdminNavbar: View {
+    func `init`() {}
+
+    @override
+    func render(os: &OutputStream): void {
+        cxyml::render("""
+            <nav class="admin-navbar">
+                <div class="admin-navbar-inner">
+                    <a href="/admin" class="admin-navbar-brand">
+                        📦 Cxy Registry Admin
+                    </a>
+                    <ul class="admin-navbar-links">
+                        <li><a href="/admin">Dashboard</a></li>
+                        <li><a href="/admin/tokens">Tokens</a></li>
+                        <li><a href="/admin/packages">Packages</a></li>
+                        <li><a href="/" target="_blank">View Site</a></li>
+                        <li><a href="#" id="logout-btn">Logout</a></li>
+                    </ul>
+                </div>
+            </nav>
+        """)
+    }
+}
