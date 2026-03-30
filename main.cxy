@@ -1,12 +1,25 @@
 import { Server, Config } from "stdlib/http.cxy"
 import { Address } from "stdlib/net.cxy"
 import { RepoProvider, AuthMiddleware } from "./src/api/middleware.cxy"
-import { Endpoint, health, packages, admin } from "./src/api/handlers.cxy"
+import { Endpoint, health, packages, admin, userKeys } from "./src/api/handlers.cxy"
 import { adminUI } from "./src/admin/handlers.cxy"
+import { initOAuthClient, registerAuthRoutes } from "./src/api/auth.cxy"
 import { parse as parseConfig } from "./src/config.cxy"
 
 func main(args: [string]): !void {
     var config = parseConfig(args)
+
+    // Initialize OAuth if configured
+    var hasOAuth = false
+    if !!config.githubClientId && !!config.githubClientSecret && !!config.githubCallbackUrl {
+        initOAuthClient(
+            *config.githubClientId,
+            *config.githubClientSecret,
+            *config.githubCallbackUrl
+        )
+        hasOAuth = true
+    }
+
     // Display startup configuration
     println("=====================================")
     println("  Cxy Package Registry Server")
@@ -15,6 +28,11 @@ func main(args: [string]): !void {
     println(f"Database:     {config.dbPath}")
     println(f"Registry URL: {config.registryUrl}")
     println("JWT Secret:   [configured]")
+    if hasOAuth {
+        println("GitHub OAuth: [enabled]")
+    } else {
+        println("GitHub OAuth: [disabled - using local auth only]")
+    }
     println("=====================================")
 
     // Create server with middleware
@@ -24,15 +42,19 @@ func main(args: [string]): !void {
     server.middleware[RepoProvider]().configure(config)
     server.middleware[AuthMiddleware]().configure(config)
 
-    // Bootstrap admin token on first run
-    server.middleware[RepoProvider]().bootstrapAdminToken(config.jwtSecret.__str()) catch {
-        println(f"Warning: Failed to bootstrap admin token: {ex!}")
+    // Bootstrap admin user on first run
+    server.middleware[RepoProvider]().bootstrapAdmin(config.adminPassword) catch {
+        println(f"Warning: Failed to bootstrap admin user: {ex!}")
         yield false
     }
 
+
+
     // Register routes
+    registerAuthRoutes(&server)
     health(&server)
     packages(&server)
+    userKeys(&server)
     admin(&server)
     adminUI(&server)
 

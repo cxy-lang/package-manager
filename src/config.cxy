@@ -7,6 +7,14 @@ pub struct Config {
     dbPath: __string = "registry.db".s
     registryUrl: String = "http://localhost:8080".S
     jwtSecret: String = null
+
+    // OAuth configuration (optional - can use local auth only)
+    githubClientId: String? = null
+    githubClientSecret: String? = null
+    githubCallbackUrl: String? = null
+
+    // Bootstrap admin password (optional - random if not set)
+    adminPassword: String? = null
 }
 
 exception ConfigError(msg: String) => msg.str()
@@ -18,6 +26,10 @@ exception ConfigError(msg: String) => msg.str()
 /// - DB_PATH: Database file path (default: registry.db)
 /// - REGISTRY_URL: Public registry URL (default: http://localhost:8080)
 /// - JWT_SECRET: JWT signing secret (required)
+/// - GITHUB_CLIENT_ID: GitHub OAuth client ID (optional)
+/// - GITHUB_CLIENT_SECRET: GitHub OAuth client secret (optional)
+/// - GITHUB_CALLBACK_URL: GitHub OAuth callback URL (optional)
+/// - ADMIN_PASSWORD: Bootstrap admin password (optional, random if not set)
 ///
 /// Args:
 ///   args: Command-line arguments (currently unused)
@@ -50,6 +62,46 @@ pub func parse(@unused args: [string]): !Config {
         raise ConfigError("JWT_SECRET cannot be empty".S)
     }
     config.jwtSecret = String(jwtSecretStr)
+
+    // Read GitHub OAuth configuration (optional)
+    var githubClientId = getenv("GITHUB_CLIENT_ID", "")
+    if !githubClientId.empty() {
+        config.githubClientId = String(githubClientId)
+    }
+
+    var githubClientSecret = getenv("GITHUB_CLIENT_SECRET", "")
+    if !githubClientSecret.empty() {
+        config.githubClientSecret = String(githubClientSecret)
+    }
+
+    var githubCallbackUrl = getenv("GITHUB_CALLBACK_URL", "")
+    if !githubCallbackUrl.empty() {
+        config.githubCallbackUrl = String(githubCallbackUrl)
+    }
+
+    // Validate GitHub OAuth configuration - all or nothing
+    var hasClientId = !!config.githubClientId
+    var hasClientSecret = !!config.githubClientSecret
+    var hasCallbackUrl = !!config.githubCallbackUrl
+    var anyGitHubConfig = hasClientId || hasClientSecret || hasCallbackUrl
+
+    if anyGitHubConfig {
+        if !hasClientId {
+            raise ConfigError("GITHUB_CLIENT_ID is required when configuring GitHub OAuth".S)
+        }
+        if !hasClientSecret {
+            raise ConfigError("GITHUB_CLIENT_SECRET is required when configuring GitHub OAuth".S)
+        }
+        if !hasCallbackUrl {
+            raise ConfigError("GITHUB_CALLBACK_URL is required when configuring GitHub OAuth".S)
+        }
+    }
+
+    // Read admin password (optional)
+    var adminPasswordStr = getenv("ADMIN_PASSWORD", "")
+    if !adminPasswordStr.empty() {
+        config.adminPassword = String(adminPasswordStr)
+    }
 
     return config
 }

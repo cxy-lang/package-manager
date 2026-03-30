@@ -1,6 +1,63 @@
 module pkg_models
 
 import { Vector } from "stdlib/vector.cxy"
+import { Time } from "stdlib/time.cxy"
+import { now as timeNow } from "./utils/time.cxy"
+
+/// Represents a user in the registry (GitHub OAuth or local admin)
+@json(partial: true)
+pub struct User {
+    id: i64 = 0
+    github_id: i64? = null           // NULL for local users
+    login: String = null             // Username or GitHub login
+    name: String? = null
+    email: String? = null
+    avatar_url: String? = null
+    @json(ignore: true)
+    password_hash: String? = null    // NULL for GitHub users (not serialized)
+    is_admin: bool = false
+    created_at: String = null        // ISO 8601 timestamp
+    last_login: String = null        // ISO 8601 timestamp
+
+    /// Check if this is a GitHub OAuth user
+    func isGitHubUser(): bool {
+        return !!github_id
+    }
+
+    /// Check if this is a local user with password
+    func isLocalUser(): bool {
+        return !!password_hash
+    }
+}
+
+/// Represents an API key owned by a user for programmatic access
+@json(partial: true)
+pub struct ApiKey {
+    id: i64 = 0
+    user_id: i64 = 0
+    key_hash: String = null          // SHA-256 hash of actual key (not serialized to client)
+    name: String = null              // User-friendly label
+    scopes: String = null            // JSON array: ["publish", "yank", "admin"]
+    created_at: String = null        // ISO 8601 timestamp
+    last_used: String = null         // ISO 8601 timestamp (null = never used)
+    expires_at: String = null        // ISO 8601 timestamp (null = never expires)
+
+    /// Check if this key has a specific scope
+    func hasScope(scope: String): bool {
+        // Parse JSON array - simplified check
+        return scopes.__str().contains(scope.__str())
+    }
+
+    /// Check if key is expired
+    func isExpired(): bool {
+        if expires_at == null {
+            return false
+        }
+        // Simple timestamp comparison (ISO 8601 strings compare lexicographically)
+        var now = timeNow()
+        return expires_at.__str() < now.__str()
+    }
+}
 
 /// Represents a package in the registry.
 @json
@@ -47,16 +104,7 @@ pub struct Dependency {
     is_dev:             bool = false
 }
 
-/// Represents an authentication token for publishing packages.
-@json
-pub struct PublishToken {
-    id:         i64 = 0
-    token_hash: String = null              // SHA-256 hash of the actual token
-    label:      String = null              // Human-readable label (e.g., "alice CI")
-    created_at: String = null              // ISO 8601 timestamp
-    @json(optional: true)
-    last_used:  String = null              // ISO 8601 timestamp (nullable)
-}
+
 
 /// Metadata extracted from Cxyfile.yaml for publishing.
 @json

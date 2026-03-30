@@ -47,27 +47,54 @@ pub const CREATE_DEPENDENCIES_VERSION_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_deps_version ON dependencies (version_id)
 """
 
-pub const CREATE_PUBLISH_TOKENS_TABLE = """
-CREATE TABLE IF NOT EXISTS publish_tokens (
+pub const CREATE_API_KEYS_TABLE = """
+CREATE TABLE IF NOT EXISTS api_keys (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    token_hash TEXT    NOT NULL UNIQUE,
-    label      TEXT,
+    user_id    INTEGER NOT NULL,
+    key_hash   TEXT    NOT NULL UNIQUE,
+    name       TEXT    NOT NULL,
+    scopes     TEXT    NOT NULL,
     created_at TEXT    NOT NULL,
-    last_used  TEXT
+    last_used  TEXT,
+    expires_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 )
 """
 
-pub const CREATE_PUBLISH_TOKENS_HASH_INDEX = """
-CREATE INDEX IF NOT EXISTS idx_tokens_hash ON publish_tokens (token_hash)
+pub const CREATE_API_KEYS_KEY_HASH_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys (key_hash)
 """
 
-pub const CREATE_ADMIN_TOKEN_TABLE = """
-CREATE TABLE IF NOT EXISTS admin_token (
-    id         INTEGER PRIMARY KEY CHECK (id = 1),
-    token      TEXT    NOT NULL,
-    created_at TEXT    NOT NULL,
-    last_used  TEXT
+pub const CREATE_API_KEYS_USER_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys (user_id)
+"""
+
+/// Users table for authentication (GitHub OAuth and local admins)
+pub const CREATE_USERS_TABLE = """
+CREATE TABLE IF NOT EXISTS users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    github_id     INTEGER UNIQUE,
+    login         TEXT    NOT NULL UNIQUE,
+    name          TEXT,
+    email         TEXT,
+    avatar_url    TEXT,
+    password_hash TEXT,
+    is_admin      INTEGER NOT NULL DEFAULT 0,
+    created_at    TEXT    NOT NULL,
+    last_login    TEXT    NOT NULL,
+    CHECK (
+        (github_id IS NOT NULL AND password_hash IS NULL) OR
+        (github_id IS NULL AND password_hash IS NOT NULL)
+    )
 )
+"""
+
+pub const CREATE_USERS_GITHUB_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_users_github_id ON users (github_id)
+"""
+
+pub const CREATE_USERS_LOGIN_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_users_login ON users (login)
 """
 
 /// Full-text search virtual table (SQLite FTS5).
@@ -123,9 +150,12 @@ pub const SCHEMA_STATEMENTS = [
     CREATE_VERSIONS_PUBLISHED_INDEX,
     CREATE_DEPENDENCIES_TABLE,
     CREATE_DEPENDENCIES_VERSION_INDEX,
-    CREATE_PUBLISH_TOKENS_TABLE,
-    CREATE_PUBLISH_TOKENS_HASH_INDEX,
-    CREATE_ADMIN_TOKEN_TABLE,
+    CREATE_USERS_TABLE,
+    CREATE_USERS_GITHUB_INDEX,
+    CREATE_USERS_LOGIN_INDEX,
+    CREATE_API_KEYS_TABLE,
+    CREATE_API_KEYS_KEY_HASH_INDEX,
+    CREATE_API_KEYS_USER_INDEX,
     CREATE_PACKAGES_FTS,
     CREATE_PACKAGES_FTS_INSERT_TRIGGER,
     CREATE_PACKAGES_FTS_UPDATE_TRIGGER,

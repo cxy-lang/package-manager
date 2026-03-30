@@ -3,9 +3,7 @@ module admin_handlers
 import { Server, Request, Response, Status, SendFile } from "stdlib/http.cxy"
 import { Vector } from "stdlib/vector.cxy"
 import "stdlib/os.cxy"
-import { verify, decode, Jwt } from "stdlib/jwt.cxy"
 import { RepoProvider, AuthMiddleware } from "../api/middleware.cxy"
-import { LoginPage } from "./pages/login_page.cxy"
 import { DashboardPage } from "./pages/dashboard_page.cxy"
 import { TokensPage } from "./pages/tokens_page.cxy"
 import { PackagesPage } from "./pages/packages_page.cxy"
@@ -25,8 +23,8 @@ func serveAdminCSS(resp: &Response): !void {
     resp.chunk(SendFile(&&fd, fd.size()))
 }
 
-func serveAdminJS(resp: &Response): !void {
-    var fd = os.open("static/admin.js")
+func serveAppJS(resp: &Response): !void {
+    var fd = os.open("static/app.js")
     resp.header("Content-Type", "application/javascript; charset=utf-8")
     resp.chunk(SendFile(&&fd, fd.size()))
 }
@@ -47,109 +45,15 @@ pub func adminUI(ep: &AdminEndpoint): void {
         }
     }))
 
-    auth.exempt(ep("GET /static/admin.js", (@unused req: &const Request, resp: &Response) => {
-        serveAdminJS(resp) catch {
-            println("Error serving admin.js: ", ex!.what())
+    auth.exempt(ep("GET /static/app.js", (@unused req: &const Request, resp: &Response) => {
+        serveAppJS(resp) catch {
+            println("Error serving app.js: ", ex!.what())
             resp.end(Status.NotFound)
         }
     }))
 
-    // Login page - exempt from auth
-    auth.exempt(ep("GET /admin/login", (@unused req: &const Request, resp: &Response) => {
-        resp.header("Content-Type", "text/html; charset=utf-8")
-        var page = LoginPage()
-        page.render(resp.body())
-    }))
-
-    // Login verification endpoint - validates admin token
-    auth.exempt(ep("POST /admin/login", (req: &const Request, resp: &Response) => {
-        var authHeader = req.header("Authorization")
-        if !authHeader {
-            resp.header("Content-Type", "application/json; charset=utf-8")
-            resp.body() << "{\"success\":false,\"error\":\"Missing Authorization header\"}"
-            resp.end(Status.Unauthorized)
-            return
-        }
-
-        var authMw = ep.middleware[AuthMiddleware]()
-
-        // Extract Bearer token
-        var tokenStr = authHeader&.__str()
-        if tokenStr.size() < 7 || tokenStr.substr(0, 7) != "Bearer ".s {
-            resp.header("Content-Type", "application/json; charset=utf-8")
-            resp.body() << "{\"success\":false,\"error\":\"Invalid Authorization format\"}"
-            resp.end(Status.Unauthorized)
-            return
-        }
-
-        var token = tokenStr.substr(7)
-
-        // Verify token has admin scope
-        if authMw._jwtSecret == null {
-            resp.header("Content-Type", "application/json; charset=utf-8")
-            resp.body() << "{\"success\":false,\"error\":\"Server misconfigured\"}"
-            resp.end(Status.InternalError)
-            return
-        }
-
-        var isValid = verify(token, authMw._jwtSecret.__str()) catch {
-            resp.header("Content-Type", "application/json; charset=utf-8")
-            resp.body() << "{\"success\":false,\"error\":\"Invalid token\"}"
-            resp.end(Status.Unauthorized)
-            return
-        }
-
-        if !isValid {
-            resp.header("Content-Type", "application/json; charset=utf-8")
-            resp.body() << "{\"success\":false,\"error\":\"Invalid token signature\"}"
-            resp.end(Status.Unauthorized)
-            return
-        }
-
-        // Decode and check admin scope
-        var jwt = Jwt()
-        decode(&jwt, token, authMw._jwtSecret.__str()) catch {
-            resp.header("Content-Type", "application/json; charset=utf-8")
-            resp.body() << "{\"success\":false,\"error\":\"Malformed token\"}"
-            resp.end(Status.Unauthorized)
-            return
-        }
-
-        var scope = jwt.claim("scope".S)
-        if !scope {
-            resp.header("Content-Type", "application/json; charset=utf-8")
-            resp.body() << "{\"success\":false,\"error\":\"Admin access required\"}"
-            resp.end(Status.Unauthorized)
-            return
-        }
-
-        var scopeStr = scope&.asString() catch {
-            resp.header("Content-Type", "application/json; charset=utf-8")
-            resp.body() << "{\"success\":false,\"error\":\"Invalid scope\"}"
-            resp.end(Status.Unauthorized)
-            return
-        }
-
-        if scopeStr != "admin" {
-            resp.header("Content-Type", "application/json; charset=utf-8")
-            resp.body() << "{\"success\":false,\"error\":\"Admin access required\"}"
-            resp.end(Status.Unauthorized)
-            return
-        }
-
-        // Token is valid and has admin scope
-        // Set HttpOnly cookie with the token
-        var cookieValue = "admin_token=".S
-        cookieValue << token
-        cookieValue << "; HttpOnly; Path=/; SameSite=Lax; Max-Age=31536000"  // 1 year
-        resp.header("Set-Cookie", cookieValue.str())
-        resp.header("Content-Type", "application/json; charset=utf-8")
-        resp.body() << "{\"success\":true}"
-        resp.end(Status.Ok)
-    }))
-
-    // Dashboard - cookie-based authentication
-    auth.ui(ep("GET /admin", (req: &const Request, resp: &Response) => {
+    // Dashboard - requires admin authentication
+    auth.requireAdmin(ep("GET /admin", (req: &const Request, resp: &Response) => {
         var ctx = ep.context[RepoProvider](req)
         var repo = ctx.repo
 
@@ -168,15 +72,15 @@ pub func adminUI(ep: &AdminEndpoint): void {
         page.render(resp.body())
     }))
 
-    // Token management page - cookie-based authentication
-    auth.ui(ep("GET /admin/tokens", (@unused req: &const Request, resp: &Response) => {
+    // Token management page - requires admin authentication
+    auth.requireAdmin(ep("GET /admin/tokens", (@unused req: &const Request, resp: &Response) => {
         resp.header("Content-Type", "text/html; charset=utf-8")
         var page = TokensPage()
         page.render(resp.body())
     }))
 
-    // Package listing page - cookie-based authentication
-    auth.ui(ep("GET /admin/packages", (req: &const Request, resp: &Response) => {
+    // Package listing page - requires admin authentication
+    auth.requireAdmin(ep("GET /admin/packages", (req: &const Request, resp: &Response) => {
         var ctx = ep.context[RepoProvider](req)
         var repo = ctx.repo
 
@@ -196,8 +100,8 @@ pub func adminUI(ep: &AdminEndpoint): void {
         page.render(resp.body())
     }))
 
-    // Package detail/management page - cookie-based authentication
-    auth.ui(ep("GET /admin/packages/{name}", (req: &const Request, resp: &Response) => {
+    // Package detail/management page - requires admin authentication
+    auth.requireAdmin(ep("GET /admin/packages/{name}", (req: &const Request, resp: &Response) => {
         var ctx = ep.context[RepoProvider](req)
         var repo = ctx.repo
 

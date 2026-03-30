@@ -3,22 +3,33 @@ module package_manager_db_sqlite
 import { Database, Statement } from "stdlib/sqlite.cxy"
 import { Vector } from "stdlib/vector.cxy"
 import { Time } from "stdlib/time.cxy"
+import { SHA256, SHA256Digest, RAND_bytes } from "stdlib/crypto.cxy"
+import { urlEncodeBuffer } from "stdlib/base64.cxy"
+import { toJSON } from "stdlib/json.cxy"
 import {
     Package,
     Version,
     Dependency,
-    PublishToken,
     PackageMetadata,
     PublishRequest,
     DependencySpec,
     PackageSummary,
     VersionSummary,
     PackageDetails,
-    PackageSearchResult
+    PackageSearchResult,
+    User,
+    ApiKey
 } from "../models.cxy"
 import { PackageRepository } from "../repository.cxy"
 import { SCHEMA_STATEMENTS } from "./schema.cxy"
-import { bootstrapAdminToken as bootstrapToken } from "../api/admin.cxy"
+import { now as timeNow } from "../utils/time.cxy"
+
+import {
+    hashPasswordWithSalt,
+    parsePasswordHash,
+    verifyPassword,
+    generateRandomPassword
+} from "../utils/password.cxy"
 
 /// Error thrown during repository operations
 pub exception RepositoryError(msg: String = null) {
@@ -61,10 +72,7 @@ pub class SQLitePackageRepository: PackageRepository {
         }
     }
 
-    @override
-    func bootstrapAdminToken(jwtSecret: __string): !bool {
-        return bootstrapToken(&_db, jwtSecret)
-    }
+
 
     @override
     func close(): void {
@@ -432,7 +440,7 @@ pub class SQLitePackageRepository: PackageRepository {
 
     @override
     func publishPackage(req: &PublishRequest): !i64 {
-        var timestamp = _getCurrentTimestamp()
+        var timestamp = timeNow()
 
         // Check if package exists
         var existingStmt = _db.exec(
@@ -590,40 +598,158 @@ pub class SQLitePackageRepository: PackageRepository {
     // -----------------------------------------------------------------------
 
     @override
-    func validateToken(tokenHash: __string): bool {
-        var stmt = _db.exec(
-            "SELECT 1 FROM publish_tokens WHERE token_hash = ?",
-            tokenHash
-        ) catch {
-            return false  // Fail closed on DB error
+    func createApiKey(
+        userId: i64,
+        name: String,
+        scopes: &Vector[String],
+        expiresAt: String
+    ): !(String, ApiKey) {
+        var now = timeNow()
+
+        // Generate API key with prefix
+        var plainKey = this._generateApiKey()
+
+        // Hash the key for storage
+        var digest = SHA256Digest{}
+        SHA256(&digest, plainKey.data() as ^const void, plainKey.size())
+        var keyHash = digest.hex()
+
+        // Convert scopes array to JSON string
+        var scopesJson = String()
+        toJSON(&scopesJson, scopes)
+
+        // Insert into database
+        _db.exec(
+            "INSERT INTO api_keys (user_id, key_hash, name, scopes, created_at, last_used, expires_at) VALUES (?, ?, ?, ?, ?, NULL, ?)",
+            userId,
+            keyHash.str(),
+            name.str(),
+            scopesJson.str(),
+            now,
+            expiresAt != null ? expiresAt.str() : null
+        )
+
+        // Get the created key
+        var idStmt = _db.exec("SELECT last_insert_rowid()")
+        idStmt.next()
+        var keyId = idStmt.column[i64](0)
+
+        var apiKey = ApiKey{}
+        apiKey.id = keyId
+        apiKey.user_id = userId
+        apiKey.key_hash = keyHash
+        apiKey.name = &&name
+        apiKey.scopes = &&scopesJson
+        apiKey.created_at = &&now
+        apiKey.expires_at = expiresAt
+
+        return (plainKey, apiKey)
+    }
+
+    func _readApiKey(stmt: &Statement): !ApiKey {
+        return ApiKey{
+            id:         stmt.column[i64](0),
+            user_id:    stmt.column[i64](1),
+            key_hash:   String(stmt.column[string](2)),
+            name:       String(stmt.column[string](3)),
+            scopes:     String(stmt.column[string](4)),
+            created_at: String(stmt.column[string](5)),
+            last_used:  String(stmt.column[string](6)),
+            expires_at: String(stmt.column[string](7))
         }
+    }
 
-        var exists = stmt.next()
-
-        if exists {
-            // Update last_used timestamp (best effort)
-            var timestamp = _getCurrentTimestamp()
-            _db.exec(
-                "UPDATE publish_tokens SET last_used = ? WHERE token_hash = ?",
-                timestamp.str(),
-                tokenHash
-            ) catch discard
+    func _readUser(stmt: &Statement): !User {
+        return User{
+            id:            stmt.column[i64](0),
+            github_id:     stmt.column[i64](1),
+            login:         String(stmt.column[string](2)),
+            name:          String(stmt.column[string](3)),
+            email:         String(stmt.column[string](4)),
+            avatar_url:    String(stmt.column[string](5)),
+            password_hash: String(stmt.column[string](6)),
+            is_admin:      stmt.column[i64](7) != 0,
+            created_at:    String(stmt.column[string](8)),
+            last_login:    String(stmt.column[string](9))
         }
-
-        return exists
     }
 
     @override
-    func createToken(tokenHash: __string, label: __string): !i64 {
-        var timestamp = _getCurrentTimestamp()
-        _db.exec("""
-            INSERT INTO publish_tokens (token_hash, label, created_at, last_used)
-            VALUES (?, ?, ?, NULL)
-        """, tokenHash, label, timestamp.str())
+    func getApiKey(keyId: i64): !ApiKey? {
+        var stmt = _db.exec(
+            "SELECT id, user_id, key_hash, name, scopes, created_at, last_used, expires_at FROM api_keys WHERE id = ?",
+            keyId
+        )
 
-        var idStmt = _db.exec("SELECT last_insert_rowid()")
-        idStmt.next()
-        return idStmt.column[i64](0)
+        if stmt.next() {
+            return Some(_readApiKey(&stmt))
+        }
+
+        return None[ApiKey]()
+    }
+
+    @override
+    func getUserApiKeys(userId: i64): !Vector[ApiKey] {
+        var keys = Vector[ApiKey]()
+        var stmt = _db.exec(
+            "SELECT id, user_id, key_hash, name, scopes, created_at, last_used, expires_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC",
+            userId
+        )
+
+        while stmt.next() {
+            keys.push(_readApiKey(&stmt))
+        }
+
+        return keys
+    }
+
+    @override
+    func revokeApiKey(keyId: i64, userId: i64): !void {
+        _db.exec("DELETE FROM api_keys WHERE id = ? AND user_id = ?", keyId, userId)
+    }
+
+    @override
+    func validateApiKey(keyHash: String): !User? {
+        // Hash the provided key
+        var digest = SHA256Digest{}
+        SHA256(&digest, keyHash.data() as ^const void, keyHash.size())
+        var hashedKey = digest.hex()
+
+        // Find API key
+        var stmt = _db.exec(
+            "SELECT user_id, expires_at FROM api_keys WHERE key_hash = ?",
+            hashedKey.str()
+        )
+
+        if !stmt.next() {
+            return None[User]()
+        }
+
+        var userId = stmt.column[i64](0)
+        var expiresAt = stmt.column[string](1)
+
+        // Check expiration
+        if expiresAt != null {
+            var now = timeNow()
+            if __string(expiresAt) < now.__str() {
+                return None[User]()
+            }
+        }
+
+        // Update last_used timestamp
+        var now = timeNow()
+        _db.exec("UPDATE api_keys SET last_used = ? WHERE key_hash = ?", now, hashedKey.str()) catch discard
+
+        // Load and return user
+        return this.getUser(userId)
+    }
+
+    /// Generate a random API key with format: cxy_live_<url-safe base64>
+    func _generateApiKey(): !String {
+        var bytes = RAND_bytes(24)  // 24 bytes = 32 url-safe base64 chars
+        var key = "cxy_live_".S
+        urlEncodeBuffer(&key, bytes.data() as ^const void, bytes.size())
+        return key
     }
 
     // -----------------------------------------------------------------------
@@ -653,6 +779,186 @@ pub class SQLitePackageRepository: PackageRepository {
     }
 
     // -----------------------------------------------------------------------
+    // User Management
+    // -----------------------------------------------------------------------
+
+    @override
+    func getUser(userId: i64): !User? {
+        var stmt = _db.exec("SELECT id, github_id, login, name, email, avatar_url, password_hash, is_admin, created_at, last_login FROM users WHERE id = ?", userId)
+        if stmt.next() {
+            return Some(_readUser(&stmt))
+        }
+        return None[User]()
+    }
+
+    @override
+    func getUserByGitHubId(githubId: i64): !User? {
+        var stmt = _db.exec("SELECT id, github_id, login, name, email, avatar_url, password_hash, is_admin, created_at, last_login FROM users WHERE github_id = ?", githubId)
+        if stmt.next() {
+            return Some(_readUser(&stmt))
+        }
+        return None[User]()
+    }
+
+    @override
+    func getUserByLogin(login: String): !User? {
+        var stmt = _db.exec("SELECT id, github_id, login, name, email, avatar_url, password_hash, is_admin, created_at, last_login FROM users WHERE login = ?", login.str())
+        if stmt.next() {
+            return Some(_readUser(&stmt))
+        }
+        return None[User]()
+    }
+
+    @override
+    func upsertGitHubUser(
+        githubId: i64,
+        login: String,
+        name: String?,
+        email: String?,
+        avatarUrl: String?
+    ): !User {
+        var now = timeNow()
+
+        // Check if user already exists
+        var existing = this.getUserByGitHubId(githubId)
+
+        if !!existing {
+            // Update existing user
+            _db.exec(
+                "UPDATE users SET login = ?, name = ?, email = ?, avatar_url = ?, last_login = ? WHERE github_id = ?",
+                login.str(),
+                !!name ? name&.str() : null,
+                !!email ? email&.str() : null,
+                !!avatarUrl ? avatarUrl&.str() : null,
+                now,
+                githubId
+            )
+
+            // Return updated user
+            return *getUserByGitHubId(githubId)
+        }
+
+        // Create new user
+        _db.exec(
+            "INSERT INTO users (github_id, login, name, email, avatar_url, password_hash, is_admin, created_at, last_login) VALUES (?, ?, ?, ?, ?, NULL, 0, ?, ?)",
+            githubId,
+            login.str(),
+            !!name ? name&.str() : null,
+            !!email ? email&.str() : null,
+            !!avatarUrl ? avatarUrl&.str() : null,
+            now,
+            now
+        )
+
+        // Return created user
+        return *getUserByGitHubId(githubId)
+    }
+
+    @override
+    func createLocalUser(
+        login: String,
+        password: String,
+        name: String?,
+        email: String?,
+        isAdmin: bool
+    ): !User {
+        var now = timeNow()
+
+        // Hash password
+        var passwordHash = hashPasswordWithSalt(password)
+
+        // Create user
+        _db.exec(
+            "INSERT INTO users (github_id, login, name, email, avatar_url, password_hash, is_admin, created_at, last_login) VALUES (NULL, ?, ?, ?, NULL, ?, ?, ?, ?)",
+            login.str(),
+            !!name ? name&.str() : null,
+            !!email ? email&.str() : null,
+            passwordHash.str(),
+            isAdmin ? 1 : 0,
+            now,
+            now
+        )
+
+        // Return created user
+        return *getUserByLogin(login)
+    }
+
+    @override
+    func verifyLocalUserPassword(login: String, password: String): !User? {
+        var user = getUserByLogin(login)
+
+        if !user || !user&.password_hash {
+            return None[User]()
+        }
+
+        // Parse stored hash
+        var parsed = parsePasswordHash(*user&.password_hash)
+        if !parsed {
+            return None[User]()
+        }
+
+        var salt, hash = *parsed
+
+        // Verify password
+        if verifyPassword(password, hash, salt) {
+            return &&user
+        }
+
+        return None[User]()
+    }
+
+    @override
+    func updateLastLogin(userId: i64): !void {
+        var now = timeNow()
+        _db.exec("UPDATE users SET last_login = ? WHERE id = ?", now, userId)
+    }
+
+    @override
+    func setUserAdmin(userId: i64, isAdmin: bool): !void {
+        _db.exec("UPDATE users SET is_admin = ? WHERE id = ?", isAdmin ? 1 : 0, userId)
+    }
+
+    @override
+    func bootstrapAdmin(password: String?): !bool {
+        // Check if any admin user exists
+        var stmt = _db.exec("SELECT COUNT(*) FROM users WHERE is_admin = 1")
+        if stmt.next() {
+            var count = stmt.column[i64](0)
+            if count > 0 {
+                return false  // Admin already exists
+            }
+        }
+
+        // Generate random password if not provided
+        var adminPassword = password
+        if !adminPassword {
+            adminPassword = generateRandomPassword(16)
+        }
+
+        // Create admin user
+        @unused
+        var admin = this.createLocalUser(
+            "admin".S,
+            *adminPassword,
+            "Administrator".S,
+            null,
+            true
+        )
+
+        // Print credentials to console
+        println("\n=====================================")
+        println("BOOTSTRAP: Admin user created!")
+        println("=====================================")
+        println("Username: admin")
+        println(f"Password: {*adminPassword}")
+        println("\nSave these credentials securely!")
+        println("Login at: /auth/login")
+        println("=====================================\n")
+
+        return true
+    }
+
+    // -----------------------------------------------------------------------
     // Helper methods
     // -----------------------------------------------------------------------
 
@@ -667,14 +973,6 @@ pub class SQLitePackageRepository: PackageRepository {
             // Default: relevance (for search) or updated (for list)
             return "p.updated_at DESC".S
         }
-    }
-
-    func _getCurrentTimestamp(): String {
-        // ISO 8601 timestamp: YYYY-MM-DDTHH:MM:SSZ
-        var ts = Time()
-        var result = String()
-        ts.format("%Y-%m-%dT%H:%M:%SZ", &result)
-        return &&result
     }
 }
 

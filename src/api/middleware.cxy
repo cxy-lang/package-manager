@@ -1,12 +1,13 @@
 module api_middleware
 
-import { Request, Response, Method, Route, Status } from "stdlib/http.cxy"
+import { Request, Response, Method, Route, Status, Dependencies } from "stdlib/http.cxy"
 import { verify, decode, Jwt, JwtError } from "stdlib/jwt.cxy"
 import { Time } from "stdlib/time.cxy"
 import { Value } from "stdlib/value.cxy"
 import { HashSet, HashMap } from "stdlib/hash.cxy"
 import { PackageRepository } from "../repository.cxy"
 import { SQLitePackageRepository } from "../db/sqlite_repository.cxy"
+import { User } from "../models.cxy"
 import { unauthorized } from "./response.cxy"
 
 exception MiddlewareError(msg: String) => msg.str()
@@ -57,11 +58,13 @@ pub class RepoProvider {
         }
     }
 
-    /// Bootstrap admin token on first run.
-    /// Should be called after configure() to generate the initial admin token.
-    func bootstrapAdminToken(jwtSecret: __string): !bool {
-        return _repo.bootstrapAdminToken(jwtSecret)
+    /// Bootstrap admin user on first run.
+    /// Should be called after configure() to create the initial admin user.
+    func bootstrapAdmin(password: String?): !bool {
+        return _repo.bootstrapAdmin(password)
     }
+
+
 
     func before(@unused req: &const Request, @unused resp: &Response, ctx: &Context): void {
         // Provide repo reference and registry URL to context
@@ -85,11 +88,32 @@ pub class RepoProvider {
 
 struct RouteAuthConfig {
     isExempt: bool = false
-    isAdmin: bool = false
-    isUI: bool = false
+    requireUser: bool = false    // Requires any logged-in user
+    requireAdmin: bool = false   // Requires admin user
+}
+
+/// Context for authentication middleware
+pub struct AuthContext {
+    currentUser: User? = null    // Logged-in user (null if anonymous)
+    isAdmin: bool = false        // True if user has admin privileges
+    _jwtSecret = "".s    // Populated by AuthMiddleware.before()
+    func `init`() {}
+
+    /// Create a signed session JWT for the given user
+    func createSessionToken(user: &User): !String {
+        var jwt = Jwt()
+        jwt.payload().sub = f"{user.id}"
+        jwt.payload().exp = Time().timestamp() + 2592000  // 30 days
+        jwt.claim("login".S, Value(user.login))
+        return jwt.encode(_jwtSecret)
+    }
 }
 
 pub class AuthMiddleware {
+    type Context = AuthContext
+    type Deps = (RepoProvider, )
+    type DepsContexts = Dependencies[Deps]
+
     _jwtSecret: String = null
     _routes: HashMap[u64, RouteAuthConfig] = null
 
@@ -119,151 +143,145 @@ pub class AuthMiddleware {
         return route
     }
 
-    /// Mark a route as requiring admin scope
-    /// Usage: auth.admin(server("POST /api/v1/admin/tokens", ...))
+    /// Mark a route as requiring logged-in user (session or API key)
     @inline
-    func admin(route: &Route): &Route {
-        _routes.insert(route.id(), RouteAuthConfig{isAdmin: true})
-        return route
-    }
-
-    /// Mark a route as admin UI (requires cookie-based authentication)
-    @inline
-    func ui(route: &Route, requireAdmin: bool = true): &Route {
-        _routes.insert(route.id(), RouteAuthConfig{isAdmin: requireAdmin, isUI: true})
+    func requireUser(route: &Route): &Route {
+        _routes.insert(route.id(), RouteAuthConfig{requireUser: true})
         route.setAttrs({parseCookies: true})
         return route
     }
 
-    /// Redirect to admin login page for admin UI routes
+    /// Mark a route as requiring admin user (session or API key)
     @inline
-    func redirectToLogin(resp: &Response): void {
-        resp.header("Location", "/admin/login")
-        resp.end(Status.Found)
+    func requireAdmin(route: &Route): &Route {
+        _routes.insert(route.id(), RouteAuthConfig{requireAdmin: true})
+        route.setAttrs({parseCookies: true})
+        return route
     }
 
-    func before(req: &const Request, resp: &Response): void {
-        // Check if this route has auth config
+    func before(req: &const Request, resp: &Response, ctx: &Context, deps: &DepsContexts): void {
         var route = req.route()
         var config = _routes.get(route.id())
+        var repoCtx = deps.context[RepoProvider]()
+
+        // Propagate JWT secret into context so handlers can call createSessionToken
+        ctx._jwtSecret = _jwtSecret.__str()
 
         // If no config, route is exempt
-        if !config || config&.isExempt{
+        if !config || config&.isExempt {
             return
         }
 
-        // For UI routes, try to get token from cookie first
-        var token = __string()
-        if config&.isUI {
-            var cookie = req.cookie("admin_token")
-            if !!cookie {
-                token = __copy!(*cookie)
+        // Try to load user from session cookie
+        var sessionToken = req.cookie("session_token")
+        if !!sessionToken && !sessionToken&.empty() {
+            var user = this.loadUserFromSession(__copy!(*sessionToken), repoCtx.repo)
+            if !!user {
+                ctx.currentUser = *user
+                ctx.isAdmin = user&.is_admin
             }
         }
 
-        // If no cookie token, try Authorization header
-        if token.empty() {
+        // If no session, try API key from Authorization header
+        if !ctx.currentUser {
             var authHeader = req.header("Authorization".S)
-            if !authHeader {
-                if config&.isAdmin {
-                    this.redirectToLogin(resp)
-                    return
+            if !!authHeader {
+                var user = this.loadUserFromApiKey(authHeader&.__str(), repoCtx.repo)
+                if !!user {
+                    ctx.currentUser = *user
+                    ctx.isAdmin = user&.is_admin
                 }
-                unauthorized(resp, "Missing Authorization header".S)
-                return
             }
-
-            // Extract Bearer token
-            var tokenOpt = this.extractBearerToken(authHeader&.__str())
-            if !tokenOpt {
-                if config&.isAdmin {
-                    this.redirectToLogin(resp)
-                    return
-                }
-                unauthorized(resp, "Invalid Authorization format. Expected: Bearer <token>".S)
-                return
-            }
-            token = *tokenOpt
         }
 
-        // Check if JWT secret is configured
+        // Check authorization requirements
+        if config&.requireAdmin {
+            if !ctx.isAdmin {
+                // Not logged in or not admin
+                if req.header("Authorization".S) {
+                    // API request - return 401
+                    unauthorized(resp, "Admin access required".S)
+                } else {
+                    // Browser request - redirect to login
+                    resp.redirect("/auth/login")
+                }
+                return
+            }
+        }
+        else if config&.requireUser {
+            if !ctx.currentUser {
+                // Not logged in
+                if req.header("Authorization".S) {
+                    // API request - return 401
+                    unauthorized(resp, "Authentication required".S)
+                } else {
+                    // Browser request - redirect to login
+                    resp.redirect("/auth/login")
+                }
+                return
+            }
+        }
+    }
+
+    func after(@unused req: &const Request,
+               @unused resp: &Response,
+               @unused ctx: &Context,
+               @unused deps: &DepsContexts
+    ): void {}
+
+    /// Load and validate user from session JWT
+    func loadUserFromSession(token: __string, repo: &PackageRepository): User? {
         if _jwtSecret == null {
-            if config&.isAdmin {
-                this.redirectToLogin(resp)
-                return
-            }
-            unauthorized(resp, "Server misconfigured: JWT secret not set".S)
-            return
+            return null
         }
 
-        // Verify JWT signature
-        var isValid = verify(token, _jwtSecret.__str()) catch {
-            if config&.isAdmin {
-                this.redirectToLogin(resp)
-                return
-            }
-            unauthorized(resp, "Invalid JWT token".S)
-            return
-        }
-
+        // Verify signature
+        var isValid = verify(token, _jwtSecret.__str()) catch { return null }
         if !isValid {
-            if config&.isAdmin {
-                this.redirectToLogin(resp)
-                return
-            }
-            unauthorized(resp, "Invalid token signature".S)
-            return
+            return null
         }
 
-        // Decode JWT and check expiration
+        // Decode JWT
         var jwt = Jwt()
-        decode(&jwt, token, _jwtSecret.__str()) catch {
-            if config&.isAdmin {
-                this.redirectToLogin(resp)
-                return
-            }
-            unauthorized(resp, "Malformed JWT token".S)
-            return
-        }
+        decode(&jwt, token, _jwtSecret.__str()) catch { return null }
 
         // Check expiration
         var exp = jwt.payload().exp
         if exp > 0 {
             var now = Time().timestamp()
             if exp < now {
-                if config&.isAdmin {
-                    this.redirectToLogin(resp)
-                    return
-                }
-                unauthorized(resp, "Token expired".S)
-                return
+                return null
             }
         }
 
-        // Check if this is an admin route
-        if config&.isAdmin {
-            // Admin route requires "admin" scope
-            var scope = jwt.claim("scope".S)
-            if !scope {
-                this.redirectToLogin(resp)
-                return
-            }
-
-            var scopeStr = scope&.asString() catch {
-                this.redirectToLogin(resp)
-                return
-            }
-
-            if scopeStr != "admin" {
-                this.redirectToLogin(resp)
-                return
-            }
+        // Extract user_id from "sub" claim
+        var sub = jwt.payload().sub
+        if sub.empty() {
+            return null
         }
-        // Regular authenticated routes accept any valid token
+
+        var userId = sub.__str().toi[i64]()
+
+        // Load user from database
+        return repo.getUser(userId) catch {
+            return null
+        }
     }
 
-    func after(@unused req: &const Request, @unused resp: &Response): void {
-        // No-op
+    /// Load and validate user from API key
+    func loadUserFromApiKey(authHeader: __string, repo: &PackageRepository): User? {
+        // Extract Bearer token
+        var tokenOpt = this.extractBearerToken(authHeader)
+        if !tokenOpt {
+            return null
+        }
+
+        var apiKey = *tokenOpt
+
+        // Validate API key and get user
+        return repo.validateApiKey(String(apiKey)) catch {
+            return null
+        }
     }
 
     /// Extract Bearer token from Authorization header

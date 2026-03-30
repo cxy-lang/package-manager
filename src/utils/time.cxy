@@ -1,0 +1,24 @@
+module time_utils
+
+import { Time } from "stdlib/time.cxy"
+
+/// ISO 8601 format: 2024-01-15T10:30:00Z
+macro ISO8601_FMT "%Y-%m-%dT%H:%M:%SZ"
+
+/// Format a Time as ISO 8601 string (e.g., "2024-01-15T10:30:00Z")
+pub func iso8601(t: &Time): String {
+    var result = String()
+    t.format(ISO8601_FMT!, &result)
+    return result
+}
+
+/// Get current time as ISO 8601 string
+pub func now(): String {
+    var t = Time()
+    return iso8601(&t)
+}
+
+/// Parse ISO 8601 string into Time
+pub func parse(str: string): Time {
+    return Time(str, ISO8601_FMT!)
+}

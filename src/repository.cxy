@@ -5,12 +5,13 @@ import {
     Package,
     Version,
     Dependency,
-    PublishToken,
     PackageSummary,
     VersionSummary,
     PackageDetails,
     PackageSearchResult,
-    PublishRequest
+    PublishRequest,
+    User,
+    ApiKey
 } from "./models.cxy"
 
 /// Abstract repository for package registry data operations.
@@ -105,17 +106,30 @@ pub class PackageRepository {
     virtual func recordDownload(packageName: __string, versionStr: __string): void
 
     // -----------------------------------------------------------------------
-    // Authentication
+    // API Key Management
     // -----------------------------------------------------------------------
 
-    /// Validate a publish token by its SHA-256 hash.
-    /// Updates last_used timestamp if valid.
-    /// Returns true if the token exists and is valid.
-    /// Returns false on database error (fail closed - safer for auth).
-    virtual func validateToken(tokenHash: __string): bool
+    /// Create a new API key for a user
+    /// Returns the generated key (plain text) - only shown once
+    virtual func createApiKey(
+        userId: i64,
+        name: String,
+        scopes: &Vector[String],
+        expiresAt: String
+    ): !(String, ApiKey)
 
-    /// Create a new publish token (for admin operations).
-    virtual func createToken(tokenHash: __string, label: __string): !i64
+    /// Get API key by ID
+    virtual func getApiKey(keyId: i64): !ApiKey?
+
+    /// Get all API keys for a user
+    virtual func getUserApiKeys(userId: i64): !Vector[ApiKey]
+
+    /// Revoke (delete) an API key
+    virtual func revokeApiKey(keyId: i64, userId: i64): !void
+
+    /// Validate API key and return associated user if valid
+    /// Updates last_used timestamp if valid
+    virtual func validateApiKey(keyHash: String): !User?
 
     // -----------------------------------------------------------------------
     // Statistics
@@ -130,17 +144,56 @@ pub class PackageRepository {
     virtual func getTotalDownloadCount(): i64
 
     // -----------------------------------------------------------------------
+    // User Management
+    // -----------------------------------------------------------------------
+
+    /// Get user by ID
+    virtual func getUser(userId: i64): !User?
+
+    /// Get user by GitHub ID
+    virtual func getUserByGitHubId(githubId: i64): !User?
+
+    /// Get user by login (username)
+    virtual func getUserByLogin(login: String): !User?
+
+    /// Create or update GitHub user
+    virtual func upsertGitHubUser(
+        githubId: i64,
+        login: String,
+        name: String?,
+        email: String?,
+        avatarUrl: String?
+    ): !User
+
+    /// Create local user with password
+    virtual func createLocalUser(
+        login: String,
+        password: String,
+        name: String?,
+        email: String?,
+        isAdmin: bool
+    ): !User
+
+    /// Verify local user password and return user if valid
+    virtual func verifyLocalUserPassword(login: String, password: String): !User?
+
+    /// Update user's last_login timestamp
+    virtual func updateLastLogin(userId: i64): !void
+
+    /// Make user an admin
+    virtual func setUserAdmin(userId: i64, isAdmin: bool): !void
+
+    /// Bootstrap admin user on first run
+    /// Returns true if admin was created, false if already exists
+    virtual func bootstrapAdmin(password: String?): !bool
+
+    // -----------------------------------------------------------------------
     // Lifecycle
     // -----------------------------------------------------------------------
 
     /// Initialize the repository (run migrations, create schema, etc.).
     /// Safe to call multiple times (idempotent).
     virtual func initialize(): !void
-
-    /// Bootstrap admin token on first run.
-    /// Checks if admin token exists, if not generates one and prints it.
-    /// Returns true if token was generated (first run), false if already existed.
-    virtual func bootstrapAdminToken(jwtSecret: __string): !bool
 
     /// Close any open connections and clean up resources.
     /// Best-effort cleanup - errors are logged but not propagated.

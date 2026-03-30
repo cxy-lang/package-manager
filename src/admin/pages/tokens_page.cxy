@@ -13,102 +13,104 @@ class TokensContent: View {
         cxyml::render("""
             <div class="admin-container">
                 <div class="page-header">
-                    <h1>Token Management</h1>
-                    <p>Create authentication tokens for package publishing and admin operations</p>
+                    <h1>API Keys</h1>
+                    <p>Create and manage API keys for publishing packages programmatically</p>
                 </div>
 
+                <!-- Create new key form -->
                 <div class="admin-content">
-                    <div class="card-header">Create New Token</div>
+                    <div class="card-header">Create New API Key</div>
 
-                    <div id="token-error" class="form-error" style="display:none"></div>
-                    <div id="token-success" class="form-success" style="display:none"></div>
+                    <div id="key-error" class="form-error" style="display:none"></div>
 
-                    <form id="create-token-form">
+                    <form id="create-key-form">
                         <div class="form-group">
-                            <label for="subject" class="form-label">Subject (User/Email)</label>
+                            <label for="key-name" class="form-label">Key Name</label>
                             <input
                                 type="text"
-                                id="subject"
-                                name="subject"
+                                id="key-name"
+                                name="name"
                                 class="form-input"
-                                placeholder="e.g., user@example.com or username"
+                                placeholder="e.g., CI/CD Pipeline, Local Dev"
                                 required
                             />
-                            <p class="form-help">
-                                An identifier for who this token belongs to (email, username, etc.)
-                            </p>
+                            <p class="form-help">A descriptive label to identify this key</p>
                         </div>
 
                         <div class="form-group">
-                            <label for="scope" class="form-label">Scope</label>
-                            <select id="scope" name="scope" class="form-select" required>
-                                <option value="publish">Publish (can publish packages)</option>
-                                <option value="admin">Admin (full access)</option>
-                            </select>
-                            <p class="form-help">
-                                <strong>Publish:</strong> Can publish and manage their packages<br/>
-                                <strong>Admin:</strong> Full access including token creation
-                            </p>
+                            <label class="form-label">Scopes</label>
+                            <div class="checkbox-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="scopes" value="publish" checked />
+                                    <strong>publish</strong> — Can publish packages
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="scopes" value="yank" />
+                                    <strong>yank</strong> — Can yank/unyank versions
+                                </label>
+                                <label class="checkbox-label" id="admin-scope-option">
+                                    <input type="checkbox" name="scopes" value="admin" />
+                                    <strong>admin</strong> — Full admin access
+                                </label>
+                            </div>
                         </div>
 
                         <div class="form-group">
-                            <label for="days_valid" class="form-label">Days Valid</label>
+                            <label for="expires-at" class="form-label">Expiry Date (optional)</label>
                             <input
-                                type="number"
-                                id="days_valid"
-                                name="days_valid"
+                                type="date"
+                                id="expires-at"
+                                name="expires_at"
                                 class="form-input"
-                                value="90"
-                                min="1"
-                                max="365"
-                                required
                             />
-                            <p class="form-help">
-                                Number of days this token will be valid (1-365)
-                            </p>
+                            <p class="form-help">Leave empty for a key that never expires</p>
                         </div>
 
-                        <button type="submit" class="btn btn-primary">
-                            Create Token
-                        </button>
+                        <button type="submit" class="btn btn-primary">Create API Key</button>
                     </form>
                 </div>
 
-                <div id="token-result" class="admin-content" style="display:none">
-                    <div class="card-header">Generated Token</div>
-
+                <!-- Generated key - shown once after creation -->
+                <div id="key-result" class="admin-content" style="display:none">
+                    <div class="card-header">New API Key Created</div>
                     <div class="token-warning">
-                        <strong>⚠️  Save this token now!</strong>
-                        For security reasons, this token will only be displayed once.
-                        Copy it and store it securely. You will not be able to retrieve it later.
+                        <strong>⚠️  Save this key now!</strong>
+                        This key will only be displayed once and cannot be retrieved later.
+                        Store it securely (e.g., in your CI/CD secrets or password manager).
                     </div>
-
-                    <div class="token-display" id="generated-token"></div>
-
-                    <button type="button" class="btn btn-secondary" id="copy-token-btn">
+                    <div class="token-display" id="generated-key"></div>
+                    <button type="button" class="btn btn-secondary" id="copy-key-btn">
                         Copy to Clipboard
                     </button>
+
+                    <div class="card-body" style="margin-top: 1.5rem">
+                        <p><strong>Use this key in your CLI:</strong></p>
+                        <div class="token-display">export CXY_REGISTRY_TOKEN=&lt;key&gt;</div>
+                        <p style="margin-top: 1rem"><strong>Or in API requests:</strong></p>
+                        <div class="token-display">Authorization: Bearer &lt;key&gt;</div>
+                    </div>
                 </div>
 
+                <!-- Existing keys list -->
                 <div class="admin-content">
-                    <div class="card-header">Usage Instructions</div>
-                    <div class="card-body">
-                        <p><strong>For CLI usage:</strong></p>
-                        <p>Set the token as an environment variable:</p>
-                        <div class="token-display">
-                            export CXY_REGISTRY_TOKEN=&lt;token&gt;
-                        </div>
-                        <p>Then publish packages with:</p>
-                        <div class="token-display">
-                            cxy package publish
-                        </div>
-
-                        <p style="margin-top: 1.5rem;"><strong>For API usage:</strong></p>
-                        <p>Include the token in the Authorization header:</p>
-                        <div class="token-display">
-                            Authorization: Bearer &lt;token&gt;
-                        </div>
+                    <div class="card-header">Your API Keys</div>
+                    <div id="keys-loading" class="card-body">Loading...</div>
+                    <div id="keys-empty" class="card-body" style="display:none">
+                        No API keys yet. Create one above.
                     </div>
+                    <table id="keys-table" class="data-table" style="display:none">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Scopes</th>
+                                <th>Created</th>
+                                <th>Last Used</th>
+                                <th>Expires</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="keys-tbody"></tbody>
+                    </table>
                 </div>
             </div>
         """)
@@ -117,7 +119,7 @@ class TokensContent: View {
 
 // Page component - wraps content with layout
 pub class TokensPage: View {
-    - _content: TokensContent;
+    - _content: TokensContent
 
     func `init`() {
         _content = TokensContent()
@@ -125,7 +127,7 @@ pub class TokensPage: View {
 
     @override
     func render(os: &OutputStream): void {
-        var layout = AdminLayout("Token Management".S, &_content)
+        var layout = AdminLayout("API Keys".S, &_content)
         layout.render(os)
     }
 }

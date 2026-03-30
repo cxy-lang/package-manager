@@ -13,20 +13,10 @@ dependencies:
     repository: https://github.com/cxy-lang/cxyml.git
     version: "*"
     tag: v0.1.0
-
-install:
-  - name: disable-macos-wait-async-warning
-    required: true
-    script: |
-      if [ $(uname) = "Darwin" ]; then
-        # Disable macOS wait async warning
-        echo "--define=MACOS_WAIT_ASYNC_WARNING_OFF=1"
-      fi
-  - name: openssl
-    required: true
-    script: |
-      # We do not libs, cxy sources usually specify the libs they need
-      cxy package find-system openssl --include-dir --lib-dir
+  - name: oauth
+    repository: https://github.com/cxy-lang/oauth.git
+    version: "*"
+    tag: v0.1.0
 
 tests:
   - file: "src/**/*.cxy"
@@ -34,7 +24,7 @@ tests:
 scripts:
   build-app:
     inputs:
-      - src/**/*.cxy
+      - "src/**/*.cxy"
     outputs:
       - "{{BUILD_DIR}}/package-manager"
     command: cxy package build
@@ -66,6 +56,7 @@ scripts:
         cxy utils async-cmd-logs $PID
         exit 1
       fi
+
   release:
     depends: [build-app]
     command: |
@@ -73,3 +64,19 @@ scripts:
       mkdir -p {{BUILD_DIR}}/release
       cp -r {{BUILD_DIR}}/package-manager {{BUILD_DIR}}/release
       cp -r {{SOURCE_DIR}}/static {{BUILD_DIR}}/release/
+
+install:
+  - name: disable-macos-wait-async-warning
+    script: |
+      if [ $(uname) = "Darwin" ]; then
+        # Disable macOS wait async warning
+        echo "--define=MACOS_WAIT_ASYNC_WARNING_OFF=1"
+      fi
+
+    required: true
+  - name: openssl
+    script: |
+      # We do not libs, cxy sources usually specify the libs they need
+      cxy package find-system openssl --include-dir --lib-dir
+
+    required: true

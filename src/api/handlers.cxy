@@ -4,8 +4,7 @@ import { Server, Request, Response, Status } from "stdlib/http.cxy"
 import { parse } from "stdlib/json.cxy"
 import { Vector } from "stdlib/vector.cxy"
 import { RepoProvider, AuthMiddleware } from "./middleware.cxy"
-import { generateToken } from "./admin.cxy"
-import { PublishRequest, VersionSummary } from "../models.cxy"
+import { PublishRequest, VersionSummary, ApiKey } from "../models.cxy"
 import { PackageRepository } from "../repository.cxy"
 import "./response.cxy" as response
 
@@ -107,33 +106,90 @@ pub func packages(ep: &Endpoint): void {
     })
 }
 
-/// Register admin endpoints
-pub func admin(ep: &Endpoint): void {
+/// Register user API key management endpoints
+pub func userKeys(ep: &Endpoint): void {
     var auth = ep.middleware[AuthMiddleware]()
 
-    // Create token
-    auth.admin(ep("POST /api/v1/admin/tokens", (req: &const Request, resp: &Response) => {
-        var request = parse[CreateTokenRequest](req.body().__str()) catch {
+    // List user's API keys
+    auth.requireUser(ep("GET /api/v1/user/keys", (req: &const Request, resp: &Response) => {
+        var ctx = ep.context[RepoProvider](req)
+        var authCtx = ep.context[AuthMiddleware](req)
+        var user = *authCtx.currentUser
+
+        var keys = ctx.repo.getUserApiKeys(user.id) catch {
+            response.internalError(resp, f"Failed to list API keys: {ex!.what()}")
+            return
+        }
+
+        response.jsonResponse(resp, &keys)
+    }))
+
+    // Create API key
+    auth.requireUser(ep("POST /api/v1/user/keys", (req: &const Request, resp: &Response) => {
+        var ctx = ep.context[RepoProvider](req)
+        var authCtx = ep.context[AuthMiddleware](req)
+        var user = *authCtx.currentUser
+
+        var request = parse[CreateApiKeyRequest](req.body().__str()) catch {
             response.badRequest(resp, f"Invalid JSON: {ex!.what()}")
             return
         }
 
-        if request.scope != "publish" && request.scope != "admin" {
-            response.badRequest(resp, "Invalid scope. Must be 'publish' or 'admin'".S)
+        if request.name == null || request.name.empty() {
+            response.badRequest(resp, "Missing required field: name".S)
             return
         }
 
-        var authMw = ep.middleware[AuthMiddleware]()
-        if authMw._jwtSecret == null {
-            response.internalError(resp, "JWT secret not configured".S)
+        // Only admins can create admin-scoped keys
+        if request.hasAdminScope() && !user.is_admin {
+            response.forbidden(resp, "Admin scope requires admin privileges".S)
             return
         }
 
-        handleCreateToken(resp, authMw._jwtSecret.__str(), &request)
+        var pair = ctx.repo.createApiKey(
+            user.id,
+            __copy!(request.name),
+            &request.scopes,
+            __copy!(request.expires_at)
+        ) catch {
+            response.internalError(resp, f"Failed to create API key: {ex!.what()}")
+            return
+        }
+
+        var plainKey, apiKey = pair
+        var result = CreateApiKeyResponse(&&plainKey, &&apiKey)
+        response.jsonResponse(resp, &result, Status.Create)
     }))
 
+    // Revoke API key
+    auth.requireUser(ep("DELETE /api/v1/user/keys/{id}", (req: &const Request, resp: &Response) => {
+        var ctx = ep.context[RepoProvider](req)
+        var authCtx = ep.context[AuthMiddleware](req)
+        var user = *authCtx.currentUser
+
+        var idOpt = req.param("id")
+        if !idOpt {
+            response.badRequest(resp, "Missing key id".S)
+            return
+        }
+
+        var keyId = idOpt&.toi[i64]()
+
+        ctx.repo.revokeApiKey(keyId, user.id) catch {
+            response.internalError(resp, f"Failed to revoke API key: {ex!.what()}")
+            return
+        }
+
+        resp.end(Status.NoContent)
+    }))
+}
+
+/// Register admin endpoints
+pub func admin(ep: &Endpoint): void {
+    var auth = ep.middleware[AuthMiddleware]()
+
     // Yank version
-    auth.admin(ep("POST /api/v1/admin/packages/{name}/{version}/yank", (req: &const Request, resp: &Response) => {
+    auth.requireAdmin(ep("POST /api/v1/admin/packages/{name}/{version}/yank", (req: &const Request, resp: &Response) => {
         var ctx = ep.context[RepoProvider](req)
         var repo = ctx.repo
 
@@ -159,7 +215,7 @@ pub func admin(ep: &Endpoint): void {
     }))
 
     // Unyank version
-    auth.admin(ep("POST /api/v1/admin/packages/{name}/{version}/unyank", (req: &const Request, resp: &Response) => {
+    auth.requireAdmin(ep("POST /api/v1/admin/packages/{name}/{version}/unyank", (req: &const Request, resp: &Response) => {
         var ctx = ep.context[RepoProvider](req)
         var repo = ctx.repo
 
@@ -297,27 +353,7 @@ func handlePublishPackage(resp: &Response, repo: &PackageRepository, registryUrl
     response.jsonResponse(resp, &result, Status.Create)
 }
 
-/// Create token handler
-func handleCreateToken(resp: &Response, jwtSecret: __string, request: &CreateTokenRequest): void {
-    var token = generateToken(
-        request.subject.str(),
-        jwtSecret,
-        request.scope.str(),
-        request.expiresInDays
-    ) catch {
-        response.internalError(resp, f"Failed to generate token: {ex!.what()}")
-        return
-    }
 
-    var result = CreateTokenResponse(
-        &&token,
-        __copy!(request.subject),
-        __copy!(request.scope),
-        request.expiresInDays
-    )
-
-    response.jsonResponse(resp, &result, Status.Create)
-}
 
 // ============================================================================
 // Response Models
@@ -358,30 +394,40 @@ pub struct PublishResponse {
     }
 }
 
-@json
-pub struct CreateTokenRequest {
-    subject: String = null
-    scope: String = null
-    expiresInDays: i64 = 365
+@json(partial: true)
+pub struct CreateApiKeyRequest {
+    name: String = null
+    scopes: Vector[String] = null
+    expires_at: String = null       // ISO 8601 date (null = never expires)
 
-    func `init`() {
-        this.subject = String()
-        this.scope = String()
-        this.expiresInDays = 365
+    func hasAdminScope(): bool {
+        if scopes == null {
+            return false
+        }
+        for scope, _ in scopes {
+            if scope == "admin" {
+                return true
+            }
+        }
+        return false
     }
 }
 
 @json
-pub struct CreateTokenResponse {
-    token: String = null
-    subject: String = null
-    scope: String = null
-    expiresInDays: i64 = 0
+pub struct CreateApiKeyResponse {
+    key: String = null              // Plain text key - shown ONCE
+    id: i64 = 0
+    name: String = null
+    scopes: String = null
+    created_at: String = null
+    expires_at: String = null
 
-    func `init`(token: String, subject: String, scope: String, expiresInDays: i64) {
-        this.token = &&token
-        this.subject = &&subject
-        this.scope = &&scope
-        this.expiresInDays = expiresInDays
+    func `init`(key: String, apiKey: ApiKey) {
+        this.key = &&key
+        this.id = apiKey.id
+        this.name = __copy!(apiKey.name)
+        this.scopes = __copy!(apiKey.scopes)
+        this.created_at = __copy!(apiKey.created_at)
+        this.expires_at = __copy!(apiKey.expires_at)
     }
 }

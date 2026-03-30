@@ -1,0 +1,203 @@
+module auth_handlers
+
+import { Server, Request, Response, Status } from "stdlib/http.cxy"
+import { HashMap } from "stdlib/hash.cxy"
+import { parse } from "stdlib/json.cxy"
+import "./response.cxy" as response
+
+import { OAuthClient, GitHub, getGitHubUser } from "@oauth"
+import { PackageRepository } from "../repository.cxy"
+import { User } from "../models.cxy"
+import { RepoProvider, AuthMiddleware } from "./middleware.cxy"
+import { LoginPage } from "../admin/pages/login_page.cxy"
+
+/// Type alias for server with middleware
+pub type AuthEndpoint = Server[RepoProvider, AuthMiddleware]
+
+/// JSON body for POST /auth/login
+@json
+struct LoginRequest {
+    username: String = null
+    password: String = null
+}
+
+/// JSON response for successful login (JS uses redirect field)
+@json
+struct LoginResponse {
+    redirect: String = null
+
+    func `init`(redirect: String) {
+        this.redirect = &&redirect
+    }
+}
+
+/// Global OAuth client (initialized in main)
+var oauthClient: OAuthClient? = null
+
+/// Initialize OAuth client with configuration
+pub func initOAuthClient(clientId: String, clientSecret: String, callbackUrl: String): void {
+    var config = GitHub(clientId, clientSecret, callbackUrl)
+    config.scopes.push("user:email".S)
+    oauthClient = OAuthClient(&&config)
+}
+
+/// Check if OAuth is configured
+pub func isOAuthConfigured(): bool {
+    return !!oauthClient
+}
+
+/// Register all authentication routes
+pub func registerAuthRoutes(ep: &AuthEndpoint): void {
+    var auth = ep.middleware[AuthMiddleware]()
+
+    // GET /auth/login - Display login page
+    auth.exempt(ep("GET /auth/login", (@unused req: &const Request, resp: &Response) => {
+        resp.header("Content-Type", "text/html; charset=utf-8")
+        var page = LoginPage(isOAuthConfigured())
+        page.render(resp.body())
+    }))
+
+    // POST /auth/login - Process local login (JSON body)
+    auth.exempt(ep("POST /auth/login", (req: &const Request, resp: &Response) => {
+        var ctx = ep.context[RepoProvider](req)
+        var authCtx = ep.context[AuthMiddleware](req)
+
+        // Parse JSON body
+        var body = parse[LoginRequest](req.body().__str()) catch {
+            response.badRequest(resp, "Invalid JSON body".S)
+            return
+        }
+
+        if body.username == null || body.password == null ||
+           body.username.empty() || body.password.empty() {
+            response.badRequest(resp, "Missing credentials".S)
+            return
+        }
+
+        // Verify credentials
+        var user = ctx.repo.verifyLocalUserPassword(
+            body.username,
+            body.password
+        ) catch {
+            response.unauthorized(resp, "Invalid credentials".S)
+            return
+        }
+
+        if !user {
+            response.unauthorized(resp, "Invalid credentials".S)
+            return
+        }
+
+        // Update last login
+        ctx.repo.updateLastLogin(user&.id) catch discard
+
+        // Create session token
+        var sessionToken = authCtx.createSessionToken(user.ref()) catch {
+            response.internalError(resp, "Failed to create session".S)
+            return
+        }
+
+        // Set session cookie
+        var cookieValue = f"session_token={sessionToken}; HttpOnly; Path=/; SameSite=Lax; Max-Age=2592000"
+        resp.header("Set-Cookie", cookieValue.str())
+
+        // Return redirect target for JS to follow
+        var loginResp = LoginResponse("/admin".S)
+        response.jsonResponse(resp, &loginResp)
+    }))
+
+    // GET /auth/github - Redirect to GitHub OAuth
+    auth.exempt(ep("GET /auth/github", (@unused req: &const Request, resp: &Response) => {
+        if !oauthClient {
+            resp.redirect("/auth/login?error=GitHub+OAuth+not+configured")
+            return
+        }
+
+        var authUrl = oauthClient&.getAuthorizationUrl() catch {
+            resp.redirect("/auth/login?error=Failed+to+start+OAuth")
+            return
+        }
+
+        resp.redirect(authUrl.__str())
+    }))
+
+    // GET /auth/github/callback - Handle GitHub OAuth callback
+    auth.exempt(ep("GET /auth/github/callback", (req: &const Request, resp: &Response) => {
+        var ctx = ep.context[RepoProvider](req)
+        var authCtx = ep.context[AuthMiddleware](req)
+
+        if !oauthClient {
+            resp.redirect("/auth/login?error=GitHub+OAuth+not+configured")
+            return
+        }
+
+        // Build params map from query parameters
+        var params = HashMap[String, String]()
+
+        var code = req.qparam("code".s)
+        if !!code && !code&.empty() {
+            params.["code".S] = String(__copy!(*code))
+        }
+
+        var state = req.qparam("state".s)
+        if !!state && !state&.empty() {
+            params.["state".S] = String(__copy!(*state))
+        }
+
+        // Check for OAuth errors
+        var errorParam = req.qparam("error".s)
+        if !!errorParam && !errorParam&.empty() {
+            resp.redirect("/auth/login?error=GitHub+authorization+failed")
+            return
+        }
+
+        // Exchange code for tokens
+        var tokens = oauthClient&.handleCallback(&params) catch {
+            resp.redirect("/auth/login?error=OAuth+exchange+failed")
+            return
+        }
+
+        // Fetch GitHub user info
+        var githubUser = getGitHubUser(tokens.accessToken) catch {
+            resp.redirect("/auth/login?error=Failed+to+fetch+user+info")
+            return
+        }
+
+        // Upsert user in database
+        var user = ctx.repo.upsertGitHubUser(
+            githubUser.id,
+            githubUser.login,
+            githubUser.name,
+            githubUser.email,
+            githubUser.avatarUrl
+        ) catch {
+            resp.redirect("/auth/login?error=Failed+to+create+user")
+            return
+        }
+
+        // Update last login
+        ctx.repo.updateLastLogin(user.id) catch discard
+
+        // Create session token
+        var sessionToken = authCtx.createSessionToken(&user) catch {
+            resp.redirect("/auth/login?error=Failed+to+create+session")
+            return
+        }
+
+        // Set session cookie
+        var cookieValue = f"session_token={sessionToken}; HttpOnly; Path=/; SameSite=Lax; Max-Age=2592000"
+        resp.header("Set-Cookie", cookieValue.str())
+
+        // Clear OAuth state
+        oauthClient&.clearState()
+
+        // Redirect to admin dashboard
+        resp.redirect("/admin")
+    })).setAttrs({parseQueryParams: true})
+
+    // POST /auth/logout - Clear session
+    auth.exempt(ep("POST /auth/logout", (@unused req: &const Request, resp: &Response) => {
+        resp.header("Set-Cookie", "session_token=; HttpOnly; Path=/; Max-Age=0")
+        resp.redirect("/auth/login")
+    }))
+}
