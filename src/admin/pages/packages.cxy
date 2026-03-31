@@ -1,13 +1,11 @@
-module packages_page
+module packages
 
 import plugin "cxyml" as cxyml
 import { View } from "@cxyml"
 import { Vector } from "stdlib/vector.cxy"
-import { AdminLayout } from "../components/admin_layout.cxy"
 import { PackageSummary } from "../../models.cxy"
 
-// Content component - just the page content without layout
-class PackagesContent: View {
+pub class PackagesPage: View {
     - _packages: Vector[PackageSummary];
     - _query: String;
     - _total: i64;
@@ -31,15 +29,13 @@ class PackagesContent: View {
                     <form method="GET" action="/admin/packages" style="margin-bottom: 1.5rem;">
                         <div class="form-group">
                             <label for="search" class="form-label">Search Packages</label>
-                            <div style="display: flex; gap: 0.5rem;">
+                            <div role="group">
                                 <input
                                     type="text"
                                     id="search"
                                     name="q"
-                                    class="form-input"
                                     placeholder="Search by name, description, or author..."
-                                    value="{{ _query }}"
-                                    style="flex: 1;"
+                                    value={{ _query }}
                                 />
                                 <button type="submit" class="btn btn-primary">Search</button>
                             </div>
@@ -52,7 +48,7 @@ class PackagesContent: View {
 
                     {{ if _packages.empty() }}
                         <div class="empty-state">
-                            <div class="empty-state-icon">📦</div>
+                            <div class="empty-state-icon"><i data-lucide="boxes"></i></div>
                             <p class="empty-state-text">No packages found</p>
                             {{ if _query.size() > 0 }}
                                 <p style="margin-top: 0.5rem;">
@@ -78,7 +74,7 @@ class PackagesContent: View {
                                     {{ for pkg in _packages }}
                                         <tr>
                                             <td>
-                                                <a href="/packages/{{ pkg.0.name }}" target="_blank" style="font-weight: 600;">
+                                                <a href={{ f"/admin/packages/{pkg.0.name}" }} style="font-weight: 600;">
                                                     {{ pkg.0.name }}
                                                 </a>
                                             </td>
@@ -95,7 +91,7 @@ class PackagesContent: View {
                                             </td>
                                             <td>
                                                 <div class="action-buttons">
-                                                    <a href="/admin/packages/{{ pkg.0.name }}" class="btn btn-sm btn-secondary">
+                                                    <a href={{ f"/admin/packages/{pkg.0.name}" }} class="btn btn-sm btn-secondary">
                                                         Manage
                                                     </a>
                                                 </div>
@@ -109,20 +105,5 @@ class PackagesContent: View {
                 </div>
             </div>
         """)
-    }
-}
-
-// Page component - wraps content with layout
-pub class PackagesPage: View {
-    - _content: PackagesContent;
-
-    func `init`(packages: Vector[PackageSummary], query: String, total: i64) {
-        _content = PackagesContent(&&packages, &&query, total)
-    }
-
-    @override
-    func render(os: &OutputStream): void {
-        var layout = AdminLayout("Package Management".S, &_content)
-        layout.render(os)
     }
 }

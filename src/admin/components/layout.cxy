@@ -1,0 +1,58 @@
+module layout
+
+import plugin "cxyml" as cxyml
+import { View } from "@cxyml"
+import { User } from "../../models.cxy"
+import { AdminNavbar } from "./navbar.cxy"
+
+// Thin wrapper that delegates render to a referenced View.
+// Used by AdminLayout to render the page body content.
+class Content: View {
+    _view: &View
+
+    func `init`(view: &View) {
+        _view = view
+    }
+
+    @[inline, override]
+    func render(os: &OutputStream): void {
+        _view.render(os)
+    }
+}
+
+pub struct LayoutProps {
+    title: String = null
+    view: View = null
+    user: Optional[&User] = null
+}
+
+pub class AdminLayout: View {
+    _props: LayoutProps
+
+    func `init`(props: LayoutProps) {
+        _props = &&props
+    }
+
+    @override
+    func render(os: &OutputStream): void {
+        cxyml::render("""
+            <html lang="en" data-theme="light">
+            <head>
+                <meta charset="UTF-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+                <title>{{ _props.title }} - Cxy Registry Admin</title>
+                <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+                <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" />
+                <link rel="stylesheet" href="/static/admin.css" />
+                <script src="https://cdn.jsdelivr.net/npm/flatpickr" defer></script>
+                <script src="https://unpkg.com/lucide@latest" defer></script>
+                <script src="/static/app.js" defer></script>
+            </head>
+            <body>
+                <AdminNavbar user={{_props.user}} />
+                <Content view={{&_props.view}} />
+            </body>
+            </html>
+        """)
+    }
+}

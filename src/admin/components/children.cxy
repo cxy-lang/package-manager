@@ -1,0 +1,22 @@
+module children
+
+import { View, ViewBase } from "@cxyml"
+import { Vector } from "stdlib/vector.cxy"
+
+/// Renders a vector of children directly into the output stream with no
+/// wrapper element. Used by layout components to project their children
+/// into a specific slot in their template.
+pub class Children: View {
+    func `init`(children: Vector[ViewBase]) {
+        _children = &&children
+    }
+
+    @override
+    func render(os: &OutputStream): void {
+        if _children != null {
+            for child: _children {
+                child.0.render(os)
+            }
+        }
+    }
+}

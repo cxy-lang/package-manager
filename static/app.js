@@ -4,6 +4,42 @@
 // ============================================================================
 
 // ============================================================================
+// Theme
+// ============================================================================
+
+/**
+ * Apply a theme to the <html> element and persist it.
+ * @param {"light"|"dark"|"system"} theme
+ */
+function setTheme(theme) {
+  const html = document.documentElement;
+  if (theme === "system") {
+    html.removeAttribute("data-theme");
+  } else {
+    html.setAttribute("data-theme", theme);
+  }
+  localStorage.setItem("cxy-theme", theme);
+
+  // Close dropdown after selection
+  document.activeElement?.blur();
+}
+
+/**
+ * Apply saved theme (or system default) as early as possible to avoid flash.
+ */
+function applyStoredTheme() {
+  const saved = localStorage.getItem("cxy-theme");
+  if (saved && saved !== "system") {
+    document.documentElement.setAttribute("data-theme", saved);
+  }
+  // "system" or no preference: leave the data-theme="light" from the server
+  // and let Pico respect prefers-color-scheme via its own [data-theme] logic.
+}
+
+// Apply immediately (before DOMContentLoaded) to avoid theme flash
+applyStoredTheme();
+
+// ============================================================================
 // API Helpers
 // ============================================================================
 
@@ -29,10 +65,6 @@ async function apiRequest(url, options = {}) {
   }
 
   return response;
-}
-
-async function apiGet(url) {
-  return apiRequest(url, { method: "GET" });
 }
 
 async function apiPost(url, data) {
@@ -85,15 +117,6 @@ async function copyToClipboard(text) {
   }
 }
 
-function formatDate(isoStr) {
-  if (!isoStr) return "—";
-  try {
-    return new Date(isoStr).toLocaleDateString();
-  } catch {
-    return isoStr;
-  }
-}
-
 // ============================================================================
 // Login (password form - session cookie returned by server)
 // ============================================================================
@@ -138,53 +161,36 @@ async function handleLogin(event) {
 // ============================================================================
 
 /**
- * Load and render the current user's API keys
+ * Toggle the create-key panel.
+ * - If the key result panel is visible, hide it first.
+ * - Toggles the form and flips the button label between "+ New Key" / "✕ Cancel".
  */
-async function loadApiKeys() {
-  const loading = document.getElementById("keys-loading");
-  const empty = document.getElementById("keys-empty");
-  const table = document.getElementById("keys-table");
-  const tbody = document.getElementById("keys-tbody");
+function toggleCreateForm() {
+  const panel = document.getElementById("create-key-panel");
+  const btn = document.getElementById("new-key-btn");
+  const result = document.getElementById("key-result");
 
-  if (!tbody) return;
+  if (!panel) return;
 
-  try {
-    const resp = await apiGet("/api/v1/user/keys");
-    const keys = await resp.json();
+  const isVisible = panel.style.display !== "none";
 
-    if (loading) loading.style.display = "none";
-
-    if (!keys || keys.length === 0) {
-      if (empty) empty.style.display = "block";
-      return;
-    }
-
-    tbody.innerHTML = "";
-    keys.forEach((key) => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${escapeHtml(key.name)}</td>
-        <td>${escapeHtml(key.scopes || "")}</td>
-        <td>${formatDate(key.created_at)}</td>
-        <td>${formatDate(key.last_used)}</td>
-        <td>${formatDate(key.expires_at)}</td>
-        <td>
-          <button class="btn btn-danger btn-sm" onclick="revokeApiKey(${key.id}, '${escapeHtml(key.name)}')">
-            Revoke
-          </button>
-        </td>
-      `;
-      tbody.appendChild(tr);
-    });
-
-    if (table) table.style.display = "table";
-  } catch (err) {
-    if (loading) loading.textContent = "Failed to load API keys.";
+  if (isVisible) {
+    panel.style.display = "none";
+    if (btn) btn.textContent = "+ New Key";
+  } else {
+    // Hide the key result if it is currently showing
+    if (result) result.style.display = "none";
+    panel.style.display = "block";
+    if (btn) btn.textContent = "✕ Cancel";
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 }
 
 /**
- * Handle create API key form submission
+ * Handle create API key form submission.
+ * On success, stores the plain-text key in sessionStorage and reloads so the
+ * server renders a fresh table.  appInitialize() picks up the key on the next
+ * load and shows it in the key-result panel.
  */
 async function handleCreateApiKey(event) {
   event.preventDefault();
@@ -200,7 +206,6 @@ async function handleCreateApiKey(event) {
     return;
   }
 
-  // Collect checked scopes
   const scopeCheckboxes = form.querySelectorAll('input[name="scopes"]:checked');
   const scopes = Array.from(scopeCheckboxes).map((cb) => cb.value);
   if (scopes.length === 0) {
@@ -209,9 +214,7 @@ async function handleCreateApiKey(event) {
   }
 
   const expiresAtInput = document.getElementById("expires-at").value;
-  const expiresAt = expiresAtInput
-    ? new Date(expiresAtInput).toISOString()
-    : null;
+  const expiresAt = expiresAtInput || null;
 
   disableButton(submitBtn);
 
@@ -233,10 +236,10 @@ async function handleCreateApiKey(event) {
     }
 
     const data = await resp.json();
-    displayGeneratedKey(data.key);
-    form.reset();
-    enableButton(submitBtn);
-    loadApiKeys(); // Refresh list
+
+    // Store the plain-text key so it survives the reload
+    sessionStorage.setItem("newApiKey", data.key);
+    window.location.reload();
   } catch (err) {
     showError("key-error", "Network error: " + err.message);
     enableButton(submitBtn);
@@ -244,7 +247,7 @@ async function handleCreateApiKey(event) {
 }
 
 /**
- * Show the generated key (only once)
+ * Show the generated key panel (populated from sessionStorage after reload).
  */
 function displayGeneratedKey(key) {
   const result = document.getElementById("key-result");
@@ -258,7 +261,7 @@ function displayGeneratedKey(key) {
 }
 
 /**
- * Copy generated key to clipboard
+ * Copy the generated key to clipboard.
  */
 async function copyGeneratedKey() {
   const display = document.getElementById("generated-key");
@@ -274,7 +277,8 @@ async function copyGeneratedKey() {
 }
 
 /**
- * Revoke an API key
+ * Revoke an API key — reloads the page on success so the server renders
+ * the updated table.
  */
 async function revokeApiKey(keyId, keyName) {
   if (
@@ -288,7 +292,7 @@ async function revokeApiKey(keyId, keyName) {
   try {
     const resp = await apiDelete(`/api/v1/user/keys/${keyId}`);
     if (resp.ok || resp.status === 204) {
-      loadApiKeys();
+      window.location.reload();
     } else {
       alert("Failed to revoke key");
     }
@@ -359,26 +363,65 @@ function escapeHtml(str) {
 // ============================================================================
 
 function appInitialize() {
-  // Login form (password)
+  // ── Icons ──────────────────────────────────────────────────────────────────
+  if (typeof lucide !== "undefined") {
+    lucide.createIcons();
+  }
+
+  // ── Theme ──────────────────────────────────────────────────────────────────
+  // Re-apply in case the server sent data-theme="light" after our early call
+  applyStoredTheme();
+
+  // ── Login form ─────────────────────────────────────────────────────────────
   const loginForm = document.getElementById("login-form");
   if (loginForm) {
     loginForm.addEventListener("submit", handleLogin);
   }
 
-  // Create API key form
+  // ── API Keys page ──────────────────────────────────────────────────────────
+
+  // "+ New Key" / "✕ Cancel" toggle
+  const newKeyBtn = document.getElementById("new-key-btn");
+  if (newKeyBtn) {
+    newKeyBtn.addEventListener("click", toggleCreateForm);
+  }
+
+  // Create key form submission
   const createKeyForm = document.getElementById("create-key-form");
   if (createKeyForm) {
     createKeyForm.addEventListener("submit", handleCreateApiKey);
-    loadApiKeys();
   }
 
-  // Copy key button
+  // Date picker for API key expiry (Flatpickr loaded via CDN in layout)
+  const expiresAt = document.getElementById("expires-at");
+  if (expiresAt && typeof flatpickr !== "undefined") {
+    flatpickr(expiresAt, {
+      minDate: "today",
+      dateFormat: "Y-m-d",
+      allowInput: true,
+    });
+  }
+
+  // Restore generated key from sessionStorage after post-create reload
+  const pendingKey = sessionStorage.getItem("newApiKey");
+  if (pendingKey) {
+    sessionStorage.removeItem("newApiKey");
+    displayGeneratedKey(pendingKey);
+  }
+
+  // Copy key to clipboard
   const copyKeyBtn = document.getElementById("copy-key-btn");
   if (copyKeyBtn) {
     copyKeyBtn.addEventListener("click", copyGeneratedKey);
   }
 
-  // Logout button
+  // "Done" — reload to clear the key result panel
+  const doneKeyBtn = document.getElementById("done-key-btn");
+  if (doneKeyBtn) {
+    doneKeyBtn.addEventListener("click", () => window.location.reload());
+  }
+
+  // ── Logout ─────────────────────────────────────────────────────────────────
   const logoutBtn = document.getElementById("logout-btn");
   if (logoutBtn) {
     logoutBtn.addEventListener("click", function (e) {

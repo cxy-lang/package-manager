@@ -1,13 +1,11 @@
-module package_detail_page
+module package_detail
 
 import plugin "cxyml" as cxyml
 import { View } from "@cxyml"
 import { Vector } from "stdlib/vector.cxy"
-import { AdminLayout } from "../components/admin_layout.cxy"
 import { PackageDetails, VersionSummary } from "../../models.cxy"
 
-// Content component - just the page content without layout
-class PackageDetailContent: View {
+pub class PackageDetailPage: View {
     - _package: PackageDetails;
     - _versions: Vector[VersionSummary];
 
@@ -28,52 +26,49 @@ class PackageDetailContent: View {
                 <div class="admin-content">
                     <div class="card-header">Package Information</div>
                     <div class="card-body">
-                        <table style="width: 100%;">
+                        <table style="border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--surface-border); border-collapse: separate; border-spacing: 0;">
                             <tr>
-                                <td style="padding: 0.5rem 0; font-weight: 600; width: 150px;">Author</td>
-                                <td style="padding: 0.5rem 0;">{{ _package.pkg.author }}</td>
+                                <th scope="row">Author</th>
+                                <td>{{ _package.pkg.author }}</td>
                             </tr>
                             <tr>
-                                <td style="padding: 0.5rem 0; font-weight: 600;">License</td>
-                                <td style="padding: 0.5rem 0;">{{ _package.pkg.license }}</td>
+                                <th scope="row">License</th>
+                                <td>{{ _package.pkg.license }}</td>
                             </tr>
                             <tr>
-                                <td style="padding: 0.5rem 0; font-weight: 600;">Repository</td>
-                                <td style="padding: 0.5rem 0;">
-                                    <a href="{{ _package.pkg.repository }}" target="_blank" style="color: var(--admin-primary);">
+                                <th scope="row">Repository</th>
+                                <td>
+                                    <a href={{ _package.pkg.repository.__str() }} target="_blank" style="color: var(--admin-primary);">
                                         {{ _package.pkg.repository }}
                                     </a>
                                 </td>
                             </tr>
-                            {{ if _package.pkg.homepage.size() > 0 }}
+                            {{ if _package.pkg.homepage != null && _package.pkg.homepage.size() > 0 }}
                                 <tr>
-                                    <td style="padding: 0.5rem 0; font-weight: 600;">Homepage</td>
-                                    <td style="padding: 0.5rem 0;">
-                                        <a href="{{ _package.pkg.homepage }}" target="_blank" style="color: var(--admin-primary);">
+                                    <th scope="row">Homepage</th>
+                                    <td>
+                                        <a href={{ _package.pkg.homepage.__str() }} target="_blank" style="color: var(--admin-primary);">
                                             {{ _package.pkg.homepage }}
                                         </a>
                                     </td>
                                 </tr>
                             {{ /if }}
                             <tr>
-                                <td style="padding: 0.5rem 0; font-weight: 600;">Total Downloads</td>
-                                <td style="padding: 0.5rem 0;">{{ _package.pkg.total_downloads }}</td>
+                                <th scope="row">Total Downloads</th>
+                                <td>{{ _package.pkg.total_downloads }}</td>
                             </tr>
                             <tr>
-                                <td style="padding: 0.5rem 0; font-weight: 600;">Created</td>
-                                <td style="padding: 0.5rem 0;">{{ _package.pkg.created_at }}</td>
+                                <th scope="row">Created</th>
+                                <td>{{ _package.pkg.created_at }}</td>
                             </tr>
                             <tr>
-                                <td style="padding: 0.5rem 0; font-weight: 600;">Last Updated</td>
-                                <td style="padding: 0.5rem 0;">{{ _package.pkg.updated_at }}</td>
+                                <th scope="row">Last Updated</th>
+                                <td>{{ _package.pkg.updated_at }}</td>
                             </tr>
                         </table>
 
                         <div style="margin-top: 1.5rem;">
-                            <a href="/packages/{{ _package.pkg.name }}" target="_blank" class="btn btn-secondary">
-                                View Public Page
-                            </a>
-                            <a href="/admin/packages" class="btn btn-secondary" style="margin-left: 0.5rem;">
+                            <a href="/admin/packages" class="btn btn-secondary">
                                 Back to Packages
                             </a>
                         </div>
@@ -85,7 +80,7 @@ class PackageDetailContent: View {
 
                     {{ if _versions.empty() }}
                         <div class="empty-state">
-                            <div class="empty-state-icon">📦</div>
+                            <div class="empty-state-icon"><i data-lucide="package"></i></div>
                             <p class="empty-state-text">No versions found</p>
                         </div>
                     {{ else }}
@@ -129,7 +124,7 @@ class PackageDetailContent: View {
                                                         <button
                                                             type="button"
                                                             class="btn btn-sm btn-secondary"
-                                                            onclick="unyankVersion('{{ _package.pkg.name }}', '{{ ver.0.version }}')"
+                                                            onclick={{ f"unyankVersion('{_package.pkg.name}', '{ver.0.version}')" }}
                                                         >
                                                             Unyank
                                                         </button>
@@ -137,7 +132,7 @@ class PackageDetailContent: View {
                                                         <button
                                                             type="button"
                                                             class="btn btn-sm btn-danger"
-                                                            onclick="yankVersion('{{ _package.pkg.name }}', '{{ ver.0.version }}')"
+                                                            onclick={{ f"yankVersion('{_package.pkg.name}', '{ver.0.version}')" }}
                                                         >
                                                             Yank
                                                         </button>
@@ -152,7 +147,7 @@ class PackageDetailContent: View {
 
                         <div class="card" style="margin-top: 1.5rem; background: #fffbeb; border-color: #fde68a;">
                             <p style="color: #92400e; font-size: 0.875rem; margin-bottom: 0.5rem;">
-                                <strong>⚠️  About Yanking</strong>
+                                <strong><i data-lucide="alert-triangle"></i> About Yanking</strong>
                             </p>
                             <p style="color: #92400e; font-size: 0.875rem; margin-bottom: 0;">
                                 Yanking a version prevents new installations but does not break existing users.
@@ -164,23 +159,5 @@ class PackageDetailContent: View {
                 </div>
             </div>
         """)
-    }
-}
-
-// Page component - wraps content with layout
-pub class PackageDetailPage: View {
-    - _content: PackageDetailContent;
-    - _packageName: String;
-
-    func `init`(pkg: PackageDetails, versions: Vector[VersionSummary]) {
-        _packageName = __copy!(pkg.pkg.name)
-        _content = PackageDetailContent(&&pkg, &&versions)
-    }
-
-    @override
-    func render(os: &OutputStream): void {
-        var title = f"Manage {_packageName}"
-        var layout = AdminLayout(&&title, &_content)
-        layout.render(os)
     }
 }

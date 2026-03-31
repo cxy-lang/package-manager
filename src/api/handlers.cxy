@@ -130,6 +130,7 @@ pub func userKeys(ep: &Endpoint): void {
         var authCtx = ep.context[AuthMiddleware](req)
         var user = *authCtx.currentUser
 
+
         var request = parse[CreateApiKeyRequest](req.body().__str()) catch {
             response.badRequest(resp, f"Invalid JSON: {ex!.what()}")
             return
@@ -418,7 +419,7 @@ pub struct CreateApiKeyResponse {
     key: String = null              // Plain text key - shown ONCE
     id: i64 = 0
     name: String = null
-    scopes: String = null
+    scopes: Vector[String] = null
     created_at: String = null
     expires_at: String = null
 
@@ -426,7 +427,7 @@ pub struct CreateApiKeyResponse {
         this.key = &&key
         this.id = apiKey.id
         this.name = __copy!(apiKey.name)
-        this.scopes = __copy!(apiKey.scopes)
+        this.scopes = &&apiKey.scopes
         this.created_at = __copy!(apiKey.created_at)
         this.expires_at = __copy!(apiKey.expires_at)
     }

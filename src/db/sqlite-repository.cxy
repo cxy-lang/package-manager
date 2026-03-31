@@ -5,7 +5,7 @@ import { Vector } from "stdlib/vector.cxy"
 import { Time } from "stdlib/time.cxy"
 import { SHA256, SHA256Digest, RAND_bytes } from "stdlib/crypto.cxy"
 import { urlEncodeBuffer } from "stdlib/base64.cxy"
-import { toJSON } from "stdlib/json.cxy"
+import { toJSON, parse } from "stdlib/json.cxy"
 import {
     Package,
     Version,
@@ -639,7 +639,7 @@ pub class SQLitePackageRepository: PackageRepository {
         apiKey.user_id = userId
         apiKey.key_hash = keyHash
         apiKey.name = &&name
-        apiKey.scopes = &&scopesJson
+        apiKey.scopes = __copy!(scopes)
         apiKey.created_at = &&now
         apiKey.expires_at = expiresAt
 
@@ -647,12 +647,21 @@ pub class SQLitePackageRepository: PackageRepository {
     }
 
     func _readApiKey(stmt: &Statement): !ApiKey {
+        var scopesRaw = stmt.column[string](4)
+        var scopes: Vector[String] = null
+        if scopesRaw != null {
+            scopes = parse[Vector[String]](__string(scopesRaw)) catch Vector[String]()
+        }
+        else {
+            scopes = Vector[String]()
+        }
+
         return ApiKey{
             id:         stmt.column[i64](0),
             user_id:    stmt.column[i64](1),
             key_hash:   String(stmt.column[string](2)),
             name:       String(stmt.column[string](3)),
-            scopes:     String(stmt.column[string](4)),
+            scopes:     &&scopes,
             created_at: String(stmt.column[string](5)),
             last_used:  String(stmt.column[string](6)),
             expires_at: String(stmt.column[string](7))

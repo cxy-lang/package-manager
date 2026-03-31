@@ -1,0 +1,214 @@
+module api_keys
+
+import plugin "cxyml" as cxyml
+import { View } from "@cxyml"
+import { Vector } from "stdlib/vector.cxy"
+import { ApiKey } from "../../models.cxy"
+
+// ─── CreateKeyPanel ──────────────────────────────────────────────────────────
+
+class CreateKeyPanel: View {
+    func `init`() {}
+
+    @override
+    func render(os: &OutputStream): void {
+        cxyml::render("""
+            <div id="create-key-panel" class="admin-content" style="display:none">
+                <div class="card-header">Create New API Key</div>
+
+                <div id="key-error" class="form-error" style="display:none"></div>
+
+                <form id="create-key-form">
+                    <div class="form-group">
+                        <label for="key-name" class="form-label">Key Name</label>
+                        <input
+                            type="text"
+                            id="key-name"
+                            name="name"
+                            class="form-input"
+                            placeholder="e.g., CI/CD Pipeline, Local Dev"
+                            required
+                        />
+                        <p class="form-help">A descriptive label to identify this key</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Scopes</label>
+                        <div class="checkbox-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="scopes" value="publish" checked />
+                                <span><strong>publish</strong> — Can publish packages</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="scopes" value="yank" />
+                                <span><strong>yank</strong> — Can yank/unyank versions</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="scopes" value="admin" />
+                                <span><strong>admin</strong> — Full admin access</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="expires-at" class="form-label">Expiry Date (optional)</label>
+                        <input
+                            type="date"
+                            id="expires-at"
+                            name="expires_at"
+                            class="form-input"
+                        />
+                        <p class="form-help">Leave empty for a key that never expires</p>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Create API Key</button>
+                </form>
+            </div>
+        """)
+    }
+}
+
+// ─── KeyResultPanel ──────────────────────────────────────────────────────────
+
+class KeyResultPanel: View {
+    func `init`() {}
+
+    @override
+    func render(os: &OutputStream): void {
+        cxyml::render("""
+            <div id="key-result" class="admin-content" style="display:none">
+                <div class="card-header">New API Key Created</div>
+                <div class="token-warning">
+                    <strong><i data-lucide="alert-triangle"></i> Save this key now!</strong>
+                    This key will only be displayed once and cannot be retrieved later.
+                    Store it securely (e.g., in your CI/CD secrets or password manager).
+                </div>
+                <div class="token-display" id="generated-key"></div>
+                <div class="action-buttons" style="margin-top: 1rem">
+                    <button type="button" class="btn btn-secondary" id="copy-key-btn">
+                        Copy to Clipboard
+                    </button>
+                    <button type="button" class="btn btn-primary" id="done-key-btn">
+                        Done
+                    </button>
+                </div>
+                <div class="card-body" style="margin-top: 1.5rem">
+                    <p><strong>Use this key in your CLI:</strong></p>
+                    <div class="token-display">export CXY_REGISTRY_TOKEN=&lt;key&gt;</div>
+                    <p style="margin-top: 1rem"><strong>Or in API requests:</strong></p>
+                    <div class="token-display">Authorization: Bearer &lt;key&gt;</div>
+                </div>
+            </div>
+        """)
+    }
+}
+
+// ─── KeysTableSection ────────────────────────────────────────────────────────
+
+class KeysTableSection: View {
+    _keys: &Vector[ApiKey]
+
+    func `init`(keys: &Vector[ApiKey]) {
+        _keys = keys
+    }
+
+    @override
+    func render(os: &OutputStream): void {
+        cxyml::render("""
+            <div class="admin-content">
+                <div class="card-header">Your API Keys</div>
+
+                {{ if _keys.empty() }}
+                    <div class="card-body">
+                        No API keys yet. Click <strong>+ New Key</strong> above to create one.
+                    </div>
+                {{ else }}
+                    <div class="table-wrapper">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Scopes</th>
+                                    <th>Created</th>
+                                    <th>Last Used</th>
+                                    <th>Expires</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{ for key in _keys }}
+                                    <tr>
+                                        <td>{{ key.0.name }}</td>
+                                        <td>
+                                            {{ for s in key.0.scopes }}
+                                                {{ if s.1 > 0 }}, {{ /if }}{{ s.0.__str() }}
+                                            {{ /for }}
+                                        </td>
+                                        <td>{{ key.0.created_at }}</td>
+                                        <td>
+                                            {{ if key.0.last_used == null || key.0.last_used.empty() }}
+                                                —
+                                            {{ else }}
+                                                {{ key.0.last_used }}
+                                            {{ /if }}
+                                        </td>
+                                        <td>
+                                            {{ if key.0.expires_at == null || key.0.expires_at.empty() }}
+                                                —
+                                            {{ else }}
+                                                {{ key.0.expires_at }}
+                                            {{ /if }}
+                                        </td>
+                                        <td>
+                                            <div class="action-buttons">
+                                                <button
+                                                    type="button"
+                                                    class="btn btn-sm btn-danger"
+                                                    onclick={{ f"revokeApiKey({key.0.id}, '{key.0.name}')" }}
+                                                >
+                                                    Revoke
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                {{ /for }}
+                            </tbody>
+                        </table>
+                    </div>
+                {{ /if }}
+            </div>
+        """)
+    }
+}
+
+// ─── ApiKeysPage (public) ─────────────────────────────────────────────────────
+
+pub class ApiKeysPage: View {
+    _keys: Vector[ApiKey]
+
+    func `init`(keys: Vector[ApiKey]) {
+        _keys = &&keys
+    }
+
+    @override
+    func render(os: &OutputStream): void {
+        cxyml::render("""
+            <div class="admin-container">
+                <div class="page-header">
+                    <div class="page-header-row">
+                        <div>
+                            <h1>API Keys</h1>
+                            <p>Create and manage API keys for publishing packages programmatically</p>
+                        </div>
+                        <button type="button" class="btn btn-primary" id="new-key-btn">
+                            + New Key
+                        </button>
+                    </div>
+                </div>
+                <CreateKeyPanel />
+                <KeyResultPanel />
+                <KeysTableSection keys={{&_keys}} />
+            </div>
+        """)
+    }
+}

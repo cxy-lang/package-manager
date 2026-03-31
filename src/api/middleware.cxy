@@ -6,7 +6,7 @@ import { Time } from "stdlib/time.cxy"
 import { Value } from "stdlib/value.cxy"
 import { HashSet, HashMap } from "stdlib/hash.cxy"
 import { PackageRepository } from "../repository.cxy"
-import { SQLitePackageRepository } from "../db/sqlite_repository.cxy"
+import { SQLitePackageRepository } from "../db/sqlite-repository.cxy"
 import { User } from "../models.cxy"
 import { unauthorized } from "./response.cxy"
 

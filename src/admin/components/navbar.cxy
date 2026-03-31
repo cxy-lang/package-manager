@@ -1,0 +1,74 @@
+module navbar
+
+import plugin "cxyml" as cxyml
+import { View } from "@cxyml"
+import { User } from "../../models.cxy"
+
+pub class AdminNavbar: View {
+    _user: Optional[&User]
+
+    func `init`(user: Optional[&User] = null) {
+        _user = user
+    }
+
+    @override
+    func render(os: &OutputStream): void {
+        cxyml::render("""
+            <nav class="admin-navbar">
+                <div class="admin-navbar-inner">
+                    <a href="/admin" class="admin-navbar-brand">
+                        <i data-lucide="package"></i>
+                        Cxy Registry Admin
+                    </a>
+                    <ul class="admin-navbar-links">
+                        <li><a href="/admin"><i data-lucide="layout-dashboard"></i> Dashboard</a></li>
+                        <li><a href="/admin/api-keys"><i data-lucide="key-round"></i> API Keys</a></li>
+                        <li><a href="/admin/packages"><i data-lucide="boxes"></i> Packages</a></li>
+                        <li><a href="/" target="_blank"><i data-lucide="external-link"></i> View Site</a></li>
+                    </ul>
+                    <div class="admin-navbar-user">
+                        {{ if !!_user }}
+                            <div class="user-menu" tabindex="0">
+                                <button class="user-avatar-btn" type="button" aria-haspopup="true">
+                                    {{ if !!_user&.avatar_url }}
+                                        <img
+                                            src={{ *_user&.avatar_url }}
+                                            alt={{ _user&.login }}
+                                            class="user-avatar-img"
+                                        />
+                                    {{ else }}
+                                        <span class="user-avatar-initials">
+                                            {{ _user&.login }}
+                                        </span>
+                                    {{ /if }}
+                                    <span class="user-avatar-name">{{ _user&.login }}</span>
+                                    <span class="user-avatar-caret">▾</span>
+                                </button>
+                                <div class="user-dropdown">
+                                    <div class="user-dropdown-section">
+                                        <p class="user-dropdown-label">Theme</p>
+                                        <button type="button" class="user-dropdown-item" onclick="setTheme('light')">
+                                            <i data-lucide="sun"></i> Light
+                                        </button>
+                                        <button type="button" class="user-dropdown-item" onclick="setTheme('dark')">
+                                            <i data-lucide="moon"></i> Dark
+                                        </button>
+                                        <button type="button" class="user-dropdown-item" onclick="setTheme('system')">
+                                            <i data-lucide="monitor"></i> System
+                                        </button>
+                                    </div>
+                                    <div class="user-dropdown-divider"></div>
+                                    <button type="button" class="user-dropdown-item user-dropdown-logout" id="logout-btn">
+                                        <i data-lucide="log-out"></i> Logout
+                                    </button>
+                                </div>
+                            </div>
+                        {{ else }}
+                            <a href="/auth/login" class="btn btn-sm btn-primary">Login</a>
+                        {{ /if }}
+                    </div>
+                </div>
+            </nav>
+        """)
+    }
+}

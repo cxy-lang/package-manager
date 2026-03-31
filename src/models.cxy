@@ -34,18 +34,27 @@ pub struct User {
 @json(partial: true)
 pub struct ApiKey {
     id: i64 = 0
+    @json(ignore: true)
     user_id: i64 = 0
+    @json(ignore: true)
     key_hash: String = null          // SHA-256 hash of actual key (not serialized to client)
     name: String = null              // User-friendly label
-    scopes: String = null            // JSON array: ["publish", "yank", "admin"]
+    scopes: Vector[String] = null    // parsed scopes list
     created_at: String = null        // ISO 8601 timestamp
     last_used: String = null         // ISO 8601 timestamp (null = never used)
     expires_at: String = null        // ISO 8601 timestamp (null = never expires)
 
     /// Check if this key has a specific scope
     func hasScope(scope: String): bool {
-        // Parse JSON array - simplified check
-        return scopes.__str().contains(scope.__str())
+        if scopes == null {
+            return false
+        }
+        for s, _ in scopes {
+            if s == scope {
+                return true
+            }
+        }
+        return false
     }
 
     /// Check if key is expired

@@ -9,7 +9,7 @@ import { OAuthClient, GitHub, getGitHubUser } from "@oauth"
 import { PackageRepository } from "../repository.cxy"
 import { User } from "../models.cxy"
 import { RepoProvider, AuthMiddleware } from "./middleware.cxy"
-import { LoginPage } from "../admin/pages/login_page.cxy"
+import { LoginPage } from "../admin/pages/login.cxy"
 
 /// Type alias for server with middleware
 pub type AuthEndpoint = Server[RepoProvider, AuthMiddleware]
