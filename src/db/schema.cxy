@@ -72,16 +72,19 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys (user_id)
 /// Users table for authentication (GitHub OAuth and local admins)
 pub const CREATE_USERS_TABLE = """
 CREATE TABLE IF NOT EXISTS users (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    github_id     INTEGER UNIQUE,
-    login         TEXT    NOT NULL UNIQUE,
-    name          TEXT,
-    email         TEXT,
-    avatar_url    TEXT,
-    password_hash TEXT,
-    is_admin      INTEGER NOT NULL DEFAULT 0,
-    created_at    TEXT    NOT NULL,
-    last_login    TEXT    NOT NULL,
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    github_id         INTEGER UNIQUE,
+    login             TEXT    NOT NULL UNIQUE,
+    name              TEXT,
+    email             TEXT,
+    avatar_url        TEXT,
+    password_hash     TEXT,
+    is_admin          INTEGER NOT NULL DEFAULT 0,
+    created_at        TEXT    NOT NULL,
+    last_login        TEXT    NOT NULL,
+    promoted_by_id    INTEGER NOT NULL DEFAULT 0,
+    promoted_at       TEXT,
+    promoted_by_login TEXT,
     CHECK (
         (github_id IS NOT NULL AND password_hash IS NULL) OR
         (github_id IS NULL AND password_hash IS NOT NULL)

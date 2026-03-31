@@ -167,6 +167,11 @@ pub class AuthMiddleware {
         // Propagate JWT secret into context so handlers can call createSessionToken
         ctx._jwtSecret = _jwtSecret.__str()
 
+        // Static file routes are always public
+        if req.route().attrs().isStatic {
+            return
+        }
+
         // If no config, route is exempt
         if !config || config&.isExempt {
             return

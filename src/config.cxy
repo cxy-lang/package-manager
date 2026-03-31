@@ -5,6 +5,7 @@ import { getenv } from "stdlib/os.cxy"
 pub struct Config {
     port: u16 = 8080
     dbPath: __string = "registry.db".s
+    staticDir: __string = "static".s
     registryUrl: String = "http://localhost:8080".S
     jwtSecret: String = null
 
@@ -52,6 +53,9 @@ pub func parse(@unused args: [string]): !Config {
 
     // Read DB_PATH
     config.dbPath = getenv("DB_PATH", "registry.db")
+
+    // Read STATIC_DIR
+    config.staticDir = getenv("STATIC_DIR", "static")
 
     // Read REGISTRY_URL
     config.registryUrl = String(getenv("REGISTRY_URL", "http://localhost:8080"))

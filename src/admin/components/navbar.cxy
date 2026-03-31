@@ -28,13 +28,12 @@ pub class AdminNavbar: View {
                         <li><a href="/admin/api-keys"><i data-lucide="key-round"></i> API Keys</a></li>
                         <li><a href="/admin/packages"><i data-lucide="boxes"></i> Packages</a></li>
                         <li><a href="/admin/users"><i data-lucide="users"></i> Users</a></li>
-                        <li><a href="/" target="_blank"><i data-lucide="external-link"></i> View Site</a></li>
                     </ul>
                     <div class="admin-navbar-user">
                         {{ if !!_user }}
                             <div class="user-menu" tabindex="0">
                                 <button class="user-avatar-btn" type="button" aria-haspopup="true">
-                                    {{ if !!_user&.avatar_url }}
+                                    {{ if !!_user&.avatar_url && !_user&.avatar_url&.empty() }}
                                         <img
                                             src={{ *_user&.avatar_url }}
                                             alt={{ _user&.login }}
@@ -42,7 +41,7 @@ pub class AdminNavbar: View {
                                         />
                                     {{ else }}
                                         <span class="user-avatar-initials">
-                                            {{ _user&.login }}
+                                            <i data-lucide="user"></i>
                                         </span>
                                     {{ /if }}
                                     <span class="user-avatar-name">{{ _user&.login }}</span>
@@ -61,6 +60,10 @@ pub class AdminNavbar: View {
                                             <i data-lucide="monitor"></i> System
                                         </button>
                                     </div>
+                                    <div class="user-dropdown-divider"></div>
+                                    <a href="/" target="_blank" class="user-dropdown-item">
+                                        <i data-lucide="external-link"></i> View Site
+                                    </a>
                                     <div class="user-dropdown-divider"></div>
                                     <button type="button" class="user-dropdown-item user-dropdown-logout" id="logout-btn">
                                         <i data-lucide="log-out"></i> Logout

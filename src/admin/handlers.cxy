@@ -1,8 +1,7 @@
 module admin_handlers
 
-import { Server, Request, Response, Status, SendFile } from "stdlib/http.cxy"
+import { Server, Request, Response, Status } from "stdlib/http.cxy"
 import { Vector } from "stdlib/vector.cxy"
-import "stdlib/os.cxy"
 import { RepoProvider, AuthMiddleware } from "../api/middleware.cxy"
 import { AdminLayout, LayoutProps } from "./components/layout.cxy"
 import { DashboardPage } from "./pages/dashboard.cxy"
@@ -16,43 +15,12 @@ import { PackageSummary, ApiKey, User } from "../models.cxy"
 pub type AdminEndpoint = Server[RepoProvider, AuthMiddleware]
 
 // ============================================================================
-// Static Files
-// ============================================================================
-
-func serveAdminCSS(resp: &Response): !void {
-    var fd = os.open("static/admin.css")
-    resp.header("Content-Type", "text/css; charset=utf-8")
-    resp.chunk(SendFile(&&fd, fd.size()))
-}
-
-func serveAppJS(resp: &Response): !void {
-    var fd = os.open("static/app.js")
-    resp.header("Content-Type", "application/javascript; charset=utf-8")
-    resp.chunk(SendFile(&&fd, fd.size()))
-}
-
-// ============================================================================
 // Admin UI Routes
 // ============================================================================
 
 /// Register admin UI routes (web pages, not API)
 pub func adminUI(ep: &AdminEndpoint): void {
     var auth = ep.middleware[AuthMiddleware]()
-
-    // Static files - exempt from auth
-    auth.exempt(ep("GET /static/admin.css", (@unused req: &const Request, resp: &Response) => {
-        serveAdminCSS(resp) catch {
-            println("Error serving admin.css: ", ex!.what())
-            resp.end(Status.NotFound)
-        }
-    }))
-
-    auth.exempt(ep("GET /static/app.js", (@unused req: &const Request, resp: &Response) => {
-        serveAppJS(resp) catch {
-            println("Error serving app.js: ", ex!.what())
-            resp.end(Status.NotFound)
-        }
-    }))
 
     // Dashboard
     auth.requireAdmin(ep("GET /admin", (req: &const Request, resp: &Response) => {

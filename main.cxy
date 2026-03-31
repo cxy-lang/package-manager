@@ -1,4 +1,5 @@
 import { Server, Config } from "stdlib/http.cxy"
+import { FileServer, Config as FsConfig } from "stdlib/fserver.cxy"
 import { Address } from "stdlib/net.cxy"
 import { RepoProvider, AuthMiddleware } from "./src/api/middleware.cxy"
 import { Endpoint, health, packages, admin, userKeys } from "./src/api/handlers.cxy"
@@ -26,6 +27,7 @@ func main(args: [string]): !void {
     println("=====================================")
     println(f"Port:         {config.port}")
     println(f"Database:     {config.dbPath}")
+    println(f"Static Dir:   {config.staticDir}")
     println(f"Registry URL: {config.registryUrl}")
     println("JWT Secret:   [configured]")
     if hasOAuth {
@@ -37,6 +39,13 @@ func main(args: [string]): !void {
 
     // Create server with middleware
     var server = Endpoint(Config{address: Address("0.0.0.0", config.port)})
+
+    // Serve static files with caching and ETag support
+    @unused var fs = FileServer(&server, FsConfig{
+        enableSendFile: true,
+        root: String(config.staticDir),
+        route: "/static".S
+    })
 
     // Configure middleware
     server.middleware[RepoProvider]().configure(config)
