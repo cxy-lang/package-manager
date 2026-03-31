@@ -180,8 +180,11 @@ pub class PackageRepository {
     /// Update user's last_login timestamp
     virtual func updateLastLogin(userId: i64): !void
 
-    /// Make user an admin
-    virtual func setUserAdmin(userId: i64, isAdmin: bool): !void
+    /// Get list of users (GitHub users only), optionally filtered by query
+    virtual func getUsers(query: __string, limit: i32, offset: i32): !Vector[User]
+
+    /// Make or revoke admin for a user
+    virtual func setUserAdmin(userId: i64, isAdmin: bool, promotedById: i64, promotedByLogin: String): !void
 
     /// Bootstrap admin user on first run
     /// Returns true if admin was created, false if already exists

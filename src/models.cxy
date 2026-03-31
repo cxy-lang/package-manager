@@ -18,6 +18,9 @@ pub struct User {
     is_admin: bool = false
     created_at: String = null        // ISO 8601 timestamp
     last_login: String = null        // ISO 8601 timestamp
+    promoted_by_id: i64 = 0
+    promoted_at: String = null
+    promoted_by_login: String = null
 
     /// Check if this is a GitHub OAuth user
     func isGitHubUser(): bool {

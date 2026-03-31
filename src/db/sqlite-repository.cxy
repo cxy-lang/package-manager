@@ -70,6 +70,11 @@ pub class SQLitePackageRepository: PackageRepository {
         for stmt, _ in SCHEMA_STATEMENTS {
             _db.exec(stmt)
         }
+
+        // Migrations: add new columns to users table if not present
+        _db.exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS promoted_by_id INTEGER DEFAULT 0") catch discard
+        _db.exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS promoted_at TEXT") catch discard
+        _db.exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS promoted_by_login TEXT") catch discard
     }
 
 
@@ -670,16 +675,19 @@ pub class SQLitePackageRepository: PackageRepository {
 
     func _readUser(stmt: &Statement): !User {
         return User{
-            id:            stmt.column[i64](0),
-            github_id:     stmt.column[i64](1),
-            login:         String(stmt.column[string](2)),
-            name:          String(stmt.column[string](3)),
-            email:         String(stmt.column[string](4)),
-            avatar_url:    String(stmt.column[string](5)),
-            password_hash: String(stmt.column[string](6)),
-            is_admin:      stmt.column[i64](7) != 0,
-            created_at:    String(stmt.column[string](8)),
-            last_login:    String(stmt.column[string](9))
+            id:               stmt.column[i64](0),
+            github_id:        stmt.column[i64](1),
+            login:            String(stmt.column[string](2)),
+            name:             String(stmt.column[string](3)),
+            email:            String(stmt.column[string](4)),
+            avatar_url:       String(stmt.column[string](5)),
+            password_hash:    String(stmt.column[string](6)),
+            is_admin:         stmt.column[i64](7) != 0,
+            created_at:       String(stmt.column[string](8)),
+            last_login:       String(stmt.column[string](9)),
+            promoted_by_id:   stmt.column[i64](10),
+            promoted_at:      String(stmt.column[string](11)),
+            promoted_by_login: String(stmt.column[string](12))
         }
     }
 
@@ -793,7 +801,7 @@ pub class SQLitePackageRepository: PackageRepository {
 
     @override
     func getUser(userId: i64): !User? {
-        var stmt = _db.exec("SELECT id, github_id, login, name, email, avatar_url, password_hash, is_admin, created_at, last_login FROM users WHERE id = ?", userId)
+        var stmt = _db.exec("SELECT id, github_id, login, name, email, avatar_url, password_hash, is_admin, created_at, last_login, promoted_by_id, promoted_at, promoted_by_login FROM users WHERE id = ?", userId)
         if stmt.next() {
             return Some(_readUser(&stmt))
         }
@@ -802,7 +810,7 @@ pub class SQLitePackageRepository: PackageRepository {
 
     @override
     func getUserByGitHubId(githubId: i64): !User? {
-        var stmt = _db.exec("SELECT id, github_id, login, name, email, avatar_url, password_hash, is_admin, created_at, last_login FROM users WHERE github_id = ?", githubId)
+        var stmt = _db.exec("SELECT id, github_id, login, name, email, avatar_url, password_hash, is_admin, created_at, last_login, promoted_by_id, promoted_at, promoted_by_login FROM users WHERE github_id = ?", githubId)
         if stmt.next() {
             return Some(_readUser(&stmt))
         }
@@ -811,7 +819,7 @@ pub class SQLitePackageRepository: PackageRepository {
 
     @override
     func getUserByLogin(login: String): !User? {
-        var stmt = _db.exec("SELECT id, github_id, login, name, email, avatar_url, password_hash, is_admin, created_at, last_login FROM users WHERE login = ?", login.str())
+        var stmt = _db.exec("SELECT id, github_id, login, name, email, avatar_url, password_hash, is_admin, created_at, last_login, promoted_by_id, promoted_at, promoted_by_login FROM users WHERE login = ?", login.str())
         if stmt.next() {
             return Some(_readUser(&stmt))
         }
@@ -923,8 +931,46 @@ pub class SQLitePackageRepository: PackageRepository {
     }
 
     @override
-    func setUserAdmin(userId: i64, isAdmin: bool): !void {
-        _db.exec("UPDATE users SET is_admin = ? WHERE id = ?", isAdmin ? 1 : 0, userId)
+    func getUsers(query: __string, limit: i32, offset: i32): !Vector[User] {
+        var users = Vector[User]()
+        if query.size() == 0 {
+            var stmt = _db.exec(
+                "SELECT * FROM users WHERE github_id IS NOT NULL ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                limit, offset
+            )
+            while stmt.next() {
+                users.push(_readUser(&stmt))
+            }
+        } else {
+            var like = String("%".s)
+            like << query
+            like << "%"
+            var likeStr = like.__str()
+            var stmt = _db.exec(
+                "SELECT * FROM users WHERE github_id IS NOT NULL AND (login LIKE ? OR name LIKE ?) ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                likeStr, likeStr, limit, offset
+            )
+            while stmt.next() {
+                users.push(_readUser(&stmt))
+            }
+        }
+        return &&users
+    }
+
+    @override
+    func setUserAdmin(userId: i64, isAdmin: bool, promotedById: i64, promotedByLogin: String): !void {
+        if isAdmin {
+            var now = timeNow()
+            _db.exec(
+                "UPDATE users SET is_admin = 1, promoted_by_id = ?, promoted_at = ?, promoted_by_login = ? WHERE id = ?",
+                promotedById, now, promotedByLogin.str(), userId
+            )
+        } else {
+            _db.exec(
+                "UPDATE users SET is_admin = 0, promoted_by_id = 0, promoted_at = NULL, promoted_by_login = NULL WHERE id = ?",
+                userId
+            )
+        }
     }
 
     @override

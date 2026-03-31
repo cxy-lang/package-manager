@@ -9,7 +9,8 @@ import { DashboardPage } from "./pages/dashboard.cxy"
 import { ApiKeysPage } from "./pages/api-keys.cxy"
 import { PackagesPage } from "./pages/packages.cxy"
 import { PackageDetailPage } from "./pages/package-detail.cxy"
-import { PackageSummary, ApiKey } from "../models.cxy"
+import { UsersPage } from "./pages/users.cxy"
+import { PackageSummary, ApiKey, User } from "../models.cxy"
 
 /// Type alias for our configured server
 pub type AdminEndpoint = Server[RepoProvider, AuthMiddleware]
@@ -176,4 +177,33 @@ pub func adminUI(ep: &AdminEndpoint): void {
         })
         layout.render(resp.body())
     }))
+
+    // Users management page
+    auth.requireAdmin(ep("GET /admin/users", (req: &const Request, resp: &Response) => {
+        var ctx = ep.context[RepoProvider](req)
+        var authCtx = ep.context[AuthMiddleware](req)
+        var currentUser = *authCtx.currentUser
+
+        var query = req.qparam("q", "")
+
+        var users = ctx.repo.getUsers(query, 50, 0) catch {
+            println("Error fetching users: ", ex!.what())
+            resp.header("Content-Type", "text/html; charset=utf-8")
+            var layout = AdminLayout(LayoutProps{
+                title: "Users".S,
+                view: UsersPage(Vector[User](), String(query), currentUser.id),
+                user: authCtx.currentUser.ref()
+            })
+            layout.render(resp.body())
+            return
+        }
+
+        resp.header("Content-Type", "text/html; charset=utf-8")
+        var layout = AdminLayout(LayoutProps{
+            title: "Users".S,
+            view: UsersPage(&&users, String(query), currentUser.id),
+            user: authCtx.currentUser.ref()
+        })
+        layout.render(resp.body())
+    }).setAttrs({ parseQueryParams: true }))
 }

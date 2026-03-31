@@ -1,0 +1,150 @@
+module users
+
+import plugin "cxyml" as cxyml
+import { View } from "@cxyml"
+import { Vector } from "stdlib/vector.cxy"
+import { User } from "../../models.cxy"
+
+pub class UsersPage: View {
+    _users: Vector[User]
+    _query: String
+    _currentUserId: i64
+
+    func `init`(users: Vector[User], query: String, currentUserId: i64) {
+        _users = &&users
+        _query = &&query
+        _currentUserId = currentUserId
+    }
+
+    @override
+    func render(os: &OutputStream): void {
+        cxyml::render("""
+            <div class="admin-container">
+                <div class="page-header">
+                    <h1>Users</h1>
+                    <p>Manage user access and roles</p>
+                </div>
+
+                <div class="admin-content">
+                    <form method="GET" action="/admin/users" style="margin-bottom: 1.5rem;">
+                        <div class="form-group">
+                            <label for="search" class="form-label">Search Users</label>
+                            <div role="group">
+                                <input
+                                    type="text"
+                                    id="search"
+                                    name="q"
+                                    placeholder="Search by login or name..."
+                                    value={{ _query }}
+                                />
+                                <button type="submit" class="btn btn-primary">Search</button>
+                            </div>
+                        </div>
+                    </form>
+
+                    {{ if _users.empty() }}
+                        <div class="empty-state">
+                            <div class="empty-state-icon"><i data-lucide="users"></i></div>
+                            <p class="empty-state-text">No users found</p>
+                            {{ if _query.size() > 0 }}
+                                <p style="margin-top: 0.5rem;">
+                                    <a href="/admin/users" style="color: var(--admin-primary);">Clear search</a>
+                                </p>
+                            {{ /if }}
+                        </div>
+                    {{ else }}
+                        <div class="table-wrapper">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>User</th>
+                                        <th>Type</th>
+                                        <th>Role</th>
+                                        <th>Joined</th>
+                                        <th>Last Login</th>
+                                        <th>Promoted By</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {{ for user in _users }}
+                                        <tr>
+                                            <td>
+                                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                                    {{ if !!user.0.avatar_url }}
+                                                        <img
+                                                            src={{ *user.0.avatar_url }}
+                                                            alt={{ user.0.login }}
+                                                            style="width: 2rem; height: 2rem; border-radius: 50%;"
+                                                        />
+                                                    {{ else }}
+                                                        <span class="user-avatar-initials" style="width: 2rem; height: 2rem; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--admin-primary); color: #fff; font-size: 0.75rem;">
+                                                            {{ user.0.login }}
+                                                        </span>
+                                                    {{ /if }}
+                                                    <span style="font-weight: 600;">{{ user.0.login }}</span>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span class="badge badge-info">GitHub</span>
+                                            </td>
+                                            <td>
+                                                {{ if user.0.is_admin }}
+                                                    <span class="badge badge-success">Admin</span>
+                                                {{ else }}
+                                                    <span class="badge badge-info">User</span>
+                                                {{ /if }}
+                                            </td>
+                                            <td style="font-size: 0.875rem; color: var(--admin-text-muted);">
+                                                {{ user.0.created_at }}
+                                            </td>
+                                            <td style="font-size: 0.875rem; color: var(--admin-text-muted);">
+                                                {{ if user.0.last_login != null }}
+                                                    {{ user.0.last_login }}
+                                                {{ else }}
+                                                    —
+                                                {{ /if }}
+                                            </td>
+                                            <td style="font-size: 0.875rem; color: var(--admin-text-muted);">
+                                                {{ if user.0.promoted_by_login != null }}
+                                                    {{ user.0.promoted_by_login }}<br/>{{ user.0.promoted_at }}
+                                                {{ else }}
+                                                    —
+                                                {{ /if }}
+                                            </td>
+                                            <td>
+                                                <div class="action-buttons">
+                                                    {{ if user.0.id == _currentUserId }}
+                                                        <span style="font-size: 0.75rem; color: var(--admin-text-muted);">(you)</span>
+                                                    {{ else }}
+                                                        {{ if user.0.is_admin }}
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-sm btn-danger"
+                                                                onclick={{ f"revokeAdmin({user.0.id})" }}
+                                                            >
+                                                                Revoke Admin
+                                                            </button>
+                                                        {{ else }}
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-sm btn-secondary"
+                                                                onclick={{ f"makeAdmin({user.0.id})" }}
+                                                            >
+                                                                Make Admin
+                                                            </button>
+                                                        {{ /if }}
+                                                    {{ /if }}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    {{ /for }}
+                                </tbody>
+                            </table>
+                        </div>
+                    {{ /if }}
+                </div>
+            </div>
+        """)
+    }
+}

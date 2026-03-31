@@ -346,6 +346,40 @@ async function unyankVersion(packageName, version) {
 }
 
 // ============================================================================
+// User Management
+// ============================================================================
+
+async function makeAdmin(userId) {
+  if (!confirm("Grant admin privileges to this user?")) return;
+  try {
+    const resp = await apiPost(`/api/v1/admin/users/${userId}/make-admin`, {});
+    if (resp.ok) window.location.reload();
+    else alert("Failed to grant admin");
+  } catch (err) {
+    alert("Network error: " + err.message);
+  }
+}
+
+async function revokeAdmin(userId) {
+  if (
+    !confirm(
+      "Revoke admin privileges from this user?\nThey will lose access to the admin panel.",
+    )
+  )
+    return;
+  try {
+    const resp = await apiPost(
+      `/api/v1/admin/users/${userId}/revoke-admin`,
+      {},
+    );
+    if (resp.ok) window.location.reload();
+    else alert("Failed to revoke admin");
+  } catch (err) {
+    alert("Network error: " + err.message);
+  }
+}
+
+// ============================================================================
 // Utilities
 // ============================================================================
 
@@ -367,6 +401,19 @@ function appInitialize() {
   if (typeof lucide !== "undefined") {
     lucide.createIcons();
   }
+
+  // ── Active nav link ────────────────────────────────────────────────────────
+  const path = window.location.pathname;
+  const adminLinks = {
+    "/admin": path === "/admin",
+    "/admin/api-keys": path.startsWith("/admin/api-keys"),
+    "/admin/packages": path.startsWith("/admin/packages"),
+    "/admin/users": path.startsWith("/admin/users"),
+  };
+  document.querySelectorAll(".admin-navbar-links a").forEach((link) => {
+    const href = link.getAttribute("href");
+    if (href && adminLinks[href]) link.classList.add("active");
+  });
 
   // ── Theme ──────────────────────────────────────────────────────────────────
   // Re-apply in case the server sent data-theme="light" after our early call

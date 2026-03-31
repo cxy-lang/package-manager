@@ -4,7 +4,7 @@ import { Server, Request, Response, Status } from "stdlib/http.cxy"
 import { parse } from "stdlib/json.cxy"
 import { Vector } from "stdlib/vector.cxy"
 import { RepoProvider, AuthMiddleware } from "./middleware.cxy"
-import { PublishRequest, VersionSummary, ApiKey } from "../models.cxy"
+import { PublishRequest, VersionSummary, ApiKey, User } from "../models.cxy"
 import { PackageRepository } from "../repository.cxy"
 import "./response.cxy" as response
 
@@ -238,6 +238,64 @@ pub func admin(ep: &Endpoint): void {
 
         resp.header("Content-Type", "application/json; charset=utf-8")
         resp.body() << "{\"message\":\"Version unyanked successfully\"}"
+        resp.end(Status.Ok)
+    }))
+
+    // Make user admin
+    auth.requireAdmin(ep("POST /api/v1/admin/users/{id}/make-admin", (req: &const Request, resp: &Response) => {
+        var ctx = ep.context[RepoProvider](req)
+        var authCtx = ep.context[AuthMiddleware](req)
+        var currentUser = *authCtx.currentUser
+
+        var idOpt = req.param("id")
+        if !idOpt {
+            response.badRequest(resp, "Missing user id".S)
+            return
+        }
+
+        var userId = idOpt&.toi[i64]()
+
+        if userId == currentUser.id {
+            response.badRequest(resp, "Cannot grant admin to yourself".S)
+            return
+        }
+
+        ctx.repo.setUserAdmin(userId, true, currentUser.id, __copy!(currentUser.login)) catch {
+            response.internalError(resp, f"Failed to grant admin: {ex!.what()}")
+            return
+        }
+
+        resp.header("Content-Type", "application/json; charset=utf-8")
+        resp.body() << "{\"message\":\"Admin granted successfully\"}"
+        resp.end(Status.Ok)
+    }))
+
+    // Revoke user admin
+    auth.requireAdmin(ep("POST /api/v1/admin/users/{id}/revoke-admin", (req: &const Request, resp: &Response) => {
+        var ctx = ep.context[RepoProvider](req)
+        var authCtx = ep.context[AuthMiddleware](req)
+        var currentUser = *authCtx.currentUser
+
+        var idOpt = req.param("id")
+        if !idOpt {
+            response.badRequest(resp, "Missing user id".S)
+            return
+        }
+
+        var userId = idOpt&.toi[i64]()
+
+        if userId == currentUser.id {
+            response.badRequest(resp, "Cannot revoke your own admin".S)
+            return
+        }
+
+        ctx.repo.setUserAdmin(userId, false, 0, null) catch {
+            response.internalError(resp, f"Failed to revoke admin: {ex!.what()}")
+            return
+        }
+
+        resp.header("Content-Type", "application/json; charset=utf-8")
+        resp.body() << "{\"message\":\"Admin revoked successfully\"}"
         resp.end(Status.Ok)
     }))
 }

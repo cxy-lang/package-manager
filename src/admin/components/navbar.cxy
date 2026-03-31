@@ -17,13 +17,17 @@ pub class AdminNavbar: View {
             <nav class="admin-navbar">
                 <div class="admin-navbar-inner">
                     <a href="/admin" class="admin-navbar-brand">
-                        <i data-lucide="package"></i>
-                        Cxy Registry Admin
+                        <i data-lucide="package" class="brand-icon"></i>
+                        <div class="brand-logo">
+                            <span class="brand-cxy">cxy</span>
+                            <span class="brand-sub">Package Manager</span>
+                        </div>
                     </a>
                     <ul class="admin-navbar-links">
                         <li><a href="/admin"><i data-lucide="layout-dashboard"></i> Dashboard</a></li>
                         <li><a href="/admin/api-keys"><i data-lucide="key-round"></i> API Keys</a></li>
                         <li><a href="/admin/packages"><i data-lucide="boxes"></i> Packages</a></li>
+                        <li><a href="/admin/users"><i data-lucide="users"></i> Users</a></li>
                         <li><a href="/" target="_blank"><i data-lucide="external-link"></i> View Site</a></li>
                     </ul>
                     <div class="admin-navbar-user">
