@@ -1,0 +1,111 @@
+module my_handlers
+
+import { Server, Request, Response, Status } from "stdlib/http.cxy"
+import { Markdown } from "@markdown"
+import { RepoProvider, AuthMiddleware } from "../api/middleware.cxy"
+import { MyLayout, MyLayoutProps } from "./components/layout.cxy"
+import { MyKeysPage } from "./pages/keys.cxy"
+import { MyPackagesPage } from "./pages/packages.cxy"
+import { PackagePage } from "../public/pages/package.cxy"
+
+pub type MyEndpoint = Server[RepoProvider, AuthMiddleware]
+
+pub func myUI(ep: &MyEndpoint, md: &Markdown): void {
+    var auth = ep.middleware[AuthMiddleware]()
+
+    // My Packages - packages owned by the user
+    auth.requireUser(ep("GET /my/packages", (req: &const Request, resp: &Response) => {
+        var authCtx = ep.context[AuthMiddleware](req)
+        if !authCtx.currentUser {
+            resp.redirect("/auth/login")
+            return
+        }
+
+        var user = *authCtx.currentUser
+        var repoCtx = ep.context[RepoProvider](req)
+        var repo = repoCtx.repo
+
+        var result = repo.getPackagesByOwner(user.id, 100, 0) catch {
+            println("Error fetching user packages: ", ex!.what())
+            resp.end(Status.InternalError)
+            return
+        }
+
+        resp.header("Content-Type", "text/html; charset=utf-8")
+        var layout = MyLayout(MyLayoutProps{
+            title: "My Packages".S,
+            view: MyPackagesPage(&&result),
+            user: Some(&user)
+        })
+        layout.render(resp.body())
+    }))
+
+    // Package detail - rendered inside MyLayout for logged-in users
+    auth.requireUser(ep("GET /my/packages/{name}", (req: &const Request, resp: &Response) => {
+        var authCtx = ep.context[AuthMiddleware](req)
+        if !authCtx.currentUser {
+            resp.redirect("/auth/login")
+            return
+        }
+
+        var user = *authCtx.currentUser
+        var repoCtx = ep.context[RepoProvider](req)
+        var repo = repoCtx.repo
+
+        var nameOpt = req.param("name")
+        if !nameOpt {
+            resp.end(Status.BadRequest)
+            return
+        }
+
+        var pkgOpt = repo.getPackage(__copy!(*nameOpt)) catch {
+            println("Error fetching package: ", ex!.what())
+            resp.end(Status.InternalError)
+            return
+        }
+
+        if !pkgOpt {
+            resp.end(Status.NotFound)
+            return
+        }
+
+        var pkg = *pkgOpt
+        var packageName = __copy!(pkg.pkg.name)
+
+        resp.header("Content-Type", "text/html; charset=utf-8")
+        var layout = MyLayout(MyLayoutProps{
+            title: __copy!(packageName),
+            view: PackagePage(&&pkg, md),
+            user: Some(&user)
+        })
+        layout.render(resp.body())
+    }))
+
+    // My API Keys - user's own keys
+    auth.requireUser(ep("GET /my/keys", (req: &const Request, resp: &Response) => {
+        var authCtx = ep.context[AuthMiddleware](req)
+        if !authCtx.currentUser {
+            resp.redirect("/auth/login")
+            return
+        }
+
+        var user = *authCtx.currentUser
+        var repoCtx = ep.context[RepoProvider](req)
+        var repo = repoCtx.repo
+
+        // Get only this user's API keys
+        var keys = repo.getUserApiKeys(user.id) catch {
+            println("Error fetching user API keys: ", ex!.what())
+            resp.end(Status.InternalError)
+            return
+        }
+
+        resp.header("Content-Type", "text/html; charset=utf-8")
+        var layout = MyLayout(MyLayoutProps{
+            title: "My API Keys".S,
+            view: MyKeysPage(&&keys),
+            user: Some(&user)
+        })
+        layout.render(resp.body())
+    }))
+}

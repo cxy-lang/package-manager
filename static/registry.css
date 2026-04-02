@@ -3,10 +3,13 @@
    Load order: pico.min.css → theme.css → registry.css
    ============================================================ */
 
-/* Nav */
+/* ============================================================
+   Nav
+   ============================================================ */
+
 .registry-nav {
-    background: white;
-    border-bottom: 1px solid #e5e5e5;
+    background: var(--surface-bg);
+    border-bottom: 1px solid var(--surface-border);
     position: sticky;
     top: 0;
     z-index: 100;
@@ -34,7 +37,7 @@
 .registry-brand-icon {
     width: 1.5rem;
     height: 1.5rem;
-    color: #f74c00;
+    color: var(--primary-500);
 }
 
 .registry-brand-logo {
@@ -48,7 +51,7 @@
     font-family: "SF Mono", "Fira Code", monospace;
     font-size: 1.25rem;
     font-weight: 700;
-    color: #f74c00;
+    color: var(--primary-500);
 }
 
 .registry-brand-sub {
@@ -56,24 +59,91 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.12em;
-    color: #737373;
+    color: var(--text-faint);
 }
 
-.registry-admin-link {
+/* ============================================================
+   Nav Actions (theme toggle + login)
+   ============================================================ */
+
+.registry-nav-actions {
     display: flex;
     align-items: center;
-    gap: 0.375rem;
-    color: #737373;
+    gap: 0.5rem;
+}
+
+.registry-theme-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.375rem;
+    border-radius: var(--radius-md);
+    color: var(--text-faint);
+    transition:
+        color 150ms ease,
+        background 150ms ease;
+    margin: 0;
+    width: auto;
+}
+
+.registry-theme-btn:hover {
+    color: var(--primary-500);
+    background: var(--primary-50);
+}
+
+.registry-theme-btn [data-lucide] {
+    width: 1.125rem;
+    height: 1.125rem;
+}
+
+.registry-login-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: var(--text-faint);
+    font-size: 0.8125rem;
     text-decoration: none;
-    font-size: 0.875rem;
+    transition: color 150ms ease;
     white-space: nowrap;
 }
 
-.registry-admin-link:hover {
-    color: #f74c00;
+.registry-login-btn:hover {
+    color: var(--primary-500);
+    text-decoration: none;
 }
 
-.registry-admin-link [data-lucide] {
+.registry-login-btn [data-lucide] {
+    width: 0.875rem;
+    height: 0.875rem;
+}
+
+/* ============================================================
+   Nav Links (My dashboard)
+   ============================================================ */
+
+.registry-nav-link {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.875rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: var(--radius-md);
+    transition: all 150ms ease;
+    white-space: nowrap;
+}
+
+.registry-nav-link:hover {
+    color: var(--primary-600);
+    background: var(--primary-50);
+    text-decoration: none;
+}
+
+.registry-nav-link [data-lucide] {
     width: 1rem;
     height: 1rem;
 }
@@ -83,10 +153,32 @@
    ============================================================ */
 
 .registry-hero {
-    background: linear-gradient(135deg, #fff5f0 0%, #fff 60%);
-    border-bottom: 1px solid #ffe4d5;
+    background: linear-gradient(
+        135deg,
+        var(--primary-50) 0%,
+        var(--surface-bg) 60%
+    );
+    border-bottom: 1px solid var(--surface-border);
     padding: 4rem 1.5rem;
     text-align: center;
+}
+
+[data-theme="dark"] .registry-hero {
+    background: linear-gradient(
+        135deg,
+        rgba(247, 76, 0, 0.04) 0%,
+        var(--surface-bg) 50%
+    );
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) .registry-hero {
+        background: linear-gradient(
+            135deg,
+            rgba(247, 76, 0, 0.04) 0%,
+            var(--surface-bg) 50%
+        );
+    }
 }
 
 .registry-hero-inner {
@@ -97,13 +189,13 @@
 .registry-hero-title {
     font-size: 2.5rem;
     font-weight: 800;
-    color: #171717;
+    color: var(--text-primary);
     margin-bottom: 0.75rem;
 }
 
 .registry-hero-subtitle {
     font-size: 1.125rem;
-    color: #525252;
+    color: var(--text-secondary);
     margin-bottom: 2rem;
 }
 
@@ -134,19 +226,19 @@
 .registry-section-header {
     font-size: 1rem;
     font-weight: 700;
-    color: #404040;
+    color: var(--text-secondary);
     margin-bottom: 1rem;
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    border-bottom: 2px solid #f74c00;
+    border-bottom: 2px solid var(--primary-500);
     padding-bottom: 0.5rem;
 }
 
 .registry-section-header [data-lucide] {
     width: 1rem;
     height: 1rem;
-    color: #f74c00;
+    color: var(--primary-500);
 }
 
 /* ============================================================
@@ -162,16 +254,16 @@
 .registry-package-card {
     display: block;
     padding: 1rem;
-    border: 1px solid #e5e5e5;
-    border-radius: 0.5rem;
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-lg);
     text-decoration: none;
     color: inherit;
     transition: all 150ms ease;
-    background: white;
+    background: var(--surface-bg);
 }
 
 .registry-package-card:hover {
-    border-color: #f74c00;
+    border-color: var(--primary-500);
     box-shadow: 0 2px 8px rgba(247, 76, 0, 0.1);
     text-decoration: none;
 }
@@ -186,23 +278,23 @@
 .registry-package-name {
     font-weight: 700;
     font-size: 1rem;
-    color: #f74c00;
+    color: var(--primary-500);
     font-family: "SF Mono", "Fira Code", monospace;
 }
 
 .registry-package-version {
     font-size: 0.75rem;
-    background: #fff5f0;
-    color: #f74c00;
-    border: 1px solid #ffc4a3;
-    border-radius: 0.25rem;
+    background: var(--primary-50);
+    color: var(--primary-600);
+    border: 1px solid var(--primary-200);
+    border-radius: var(--radius-sm);
     padding: 0.125rem 0.375rem;
     font-weight: 600;
 }
 
 .registry-package-desc {
     font-size: 0.875rem;
-    color: #525252;
+    color: var(--text-muted);
     margin: 0 0 0.5rem;
     line-height: 1.4;
     overflow: hidden;
@@ -214,7 +306,7 @@
     display: flex;
     gap: 1rem;
     font-size: 0.75rem;
-    color: #737373;
+    color: var(--text-faint);
     flex-wrap: wrap;
 }
 
@@ -257,7 +349,7 @@
 }
 
 .registry-results-count {
-    color: #737373;
+    color: var(--text-faint);
     font-size: 0.9375rem;
     margin-bottom: 1rem;
 }
@@ -266,10 +358,10 @@
     display: flex;
     flex-direction: column;
     gap: 0;
-    border: 1px solid #e5e5e5;
-    border-radius: 0.5rem;
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-lg);
     overflow: hidden;
-    background: white;
+    background: var(--surface-bg);
 }
 
 .registry-result-item {
@@ -277,7 +369,7 @@
     padding: 1.25rem 1.5rem;
     text-decoration: none;
     color: inherit;
-    border-bottom: 1px solid #f5f5f5;
+    border-bottom: 1px solid var(--surface-border);
     transition: background 150ms ease;
 }
 
@@ -286,7 +378,7 @@
 }
 
 .registry-result-item:hover {
-    background: #fff5f0;
+    background: var(--primary-50);
     text-decoration: none;
 }
 
@@ -314,22 +406,22 @@
     align-items: center;
     gap: 0.375rem;
     padding: 0.5rem 1rem;
-    border: 1px solid #e5e5e5;
-    border-radius: 0.5rem;
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-lg);
     text-decoration: none;
-    color: #404040;
+    color: var(--text-secondary);
     font-size: 0.9375rem;
-    background: white;
+    background: var(--surface-bg);
 }
 
 .registry-page-btn:hover {
-    border-color: #f74c00;
-    color: #f74c00;
+    border-color: var(--primary-500);
+    color: var(--primary-500);
     text-decoration: none;
 }
 
 .registry-page-info {
-    color: #737373;
+    color: var(--text-faint);
     font-size: 0.9375rem;
 }
 
@@ -345,7 +437,7 @@
 .registry-package-header {
     margin-bottom: 2rem;
     padding-bottom: 1.5rem;
-    border-bottom: 1px solid #e5e5e5;
+    border-bottom: 1px solid var(--surface-border);
 }
 
 .registry-package-title {
@@ -358,7 +450,7 @@
 .registry-package-title h1 {
     font-size: 2rem;
     font-weight: 800;
-    color: #171717;
+    color: var(--text-primary);
     margin: 0;
     font-family: "SF Mono", "Fira Code", monospace;
 }
@@ -369,7 +461,7 @@
 
 .registry-package-tagline {
     font-size: 1.125rem;
-    color: #525252;
+    color: var(--text-muted);
     margin: 0 0 1rem;
 }
 
@@ -379,7 +471,7 @@
 }
 
 .registry-meta-link {
-    color: #737373;
+    color: var(--text-faint);
     text-decoration: none;
     display: flex;
     align-items: center;
@@ -387,7 +479,7 @@
 }
 
 .registry-meta-link:hover {
-    color: #f74c00;
+    color: var(--primary-500);
     text-decoration: none;
 }
 
@@ -409,9 +501,9 @@
 
 /* README */
 .registry-readme {
-    background: white;
-    border: 1px solid #e5e5e5;
-    border-radius: 0.5rem;
+    background: var(--surface-bg);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-lg);
     padding: 2rem;
 }
 
@@ -426,9 +518,9 @@
 }
 
 .registry-sidebar-card {
-    background: white;
-    border: 1px solid #e5e5e5;
-    border-radius: 0.5rem;
+    background: var(--surface-bg);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-lg);
     padding: 1rem;
 }
 
@@ -437,17 +529,17 @@
     font-size: 0.875rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: #737373;
+    color: var(--text-faint);
     margin-bottom: 0.75rem;
 }
 
 .registry-install-cmd {
     font-family: "SF Mono", "Fira Code", monospace;
     font-size: 0.875rem;
-    background: #f5f5f5;
+    background: var(--surface-subtle);
     padding: 0.625rem 0.75rem;
-    border-radius: 0.375rem;
-    color: #171717;
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
     margin-bottom: 0.5rem;
     word-break: break-all;
 }
@@ -459,17 +551,17 @@
     width: 100%;
     justify-content: center;
     padding: 0.5rem;
-    border: 1px solid #e5e5e5;
-    border-radius: 0.375rem;
-    background: white;
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-bg);
     cursor: pointer;
     font-size: 0.875rem;
-    color: #525252;
+    color: var(--text-muted);
 }
 
 .registry-copy-btn:hover {
-    border-color: #f74c00;
-    color: #f74c00;
+    border-color: var(--primary-500);
+    color: var(--primary-500);
 }
 
 .registry-copy-btn [data-lucide] {
@@ -497,20 +589,20 @@
 .registry-version-num {
     font-family: "SF Mono", "Fira Code", monospace;
     font-weight: 600;
-    color: #171717;
+    color: var(--text-primary);
 }
 
 .registry-version-yanked {
     font-size: 0.7rem;
-    background: #fef2f2;
-    color: #dc2626;
-    border: 1px solid #fecaca;
-    border-radius: 0.25rem;
+    background: var(--danger-50);
+    color: var(--danger-600);
+    border: 1px solid var(--danger-200);
+    border-radius: var(--radius-sm);
     padding: 0.1rem 0.375rem;
 }
 
 .registry-version-date {
-    color: #a3a3a3;
+    color: var(--text-faint);
     font-size: 0.8rem;
     margin-left: auto;
 }
@@ -524,7 +616,7 @@
     justify-content: space-between;
     align-items: center;
     padding: 0.375rem 0;
-    border-bottom: 1px solid #f5f5f5;
+    border-bottom: 1px solid var(--surface-border);
     font-size: 0.875rem;
 }
 
@@ -533,7 +625,7 @@
 }
 
 .registry-dep-name {
-    color: #f74c00;
+    color: var(--primary-500);
     text-decoration: none;
     font-family: "SF Mono", "Fira Code", monospace;
 }
@@ -543,7 +635,7 @@
 }
 
 .registry-dep-version {
-    color: #737373;
+    color: var(--text-faint);
     font-size: 0.8rem;
 }
 
@@ -554,7 +646,7 @@
 .registry-empty {
     text-align: center;
     padding: 2rem;
-    color: #a3a3a3;
+    color: var(--text-faint);
 }
 
 .registry-empty [data-lucide] {
@@ -569,7 +661,7 @@
 }
 
 .registry-empty a {
-    color: #f74c00;
+    color: var(--primary-500);
     text-decoration: none;
 }
 
@@ -583,7 +675,7 @@
 
 .mk-doc {
     line-height: 1.7;
-    color: #262626;
+    color: var(--text-primary);
 }
 
 .mk-h1,
@@ -596,18 +688,18 @@
     margin-bottom: 0.5em;
     font-weight: 700;
     line-height: 1.3;
-    color: #171717;
+    color: var(--text-primary);
 }
 
 .mk-h1 {
     font-size: 1.875rem;
-    border-bottom: 2px solid #e5e5e5;
+    border-bottom: 2px solid var(--surface-border);
     padding-bottom: 0.375rem;
 }
 
 .mk-h2 {
     font-size: 1.5rem;
-    border-bottom: 1px solid #e5e5e5;
+    border-bottom: 1px solid var(--surface-border);
     padding-bottom: 0.25rem;
 }
 
@@ -632,17 +724,17 @@
 }
 
 .mk-code {
-    background: #f5f5f5;
+    background: var(--surface-subtle);
     padding: 0.2em 0.4em;
-    border-radius: 0.25rem;
+    border-radius: var(--radius-sm);
     font-family: "SF Mono", "Fira Code", monospace;
     font-size: 0.875em;
-    color: #db3700;
+    color: var(--primary-600);
 }
 
 .mk-pre {
-    background: #1e1e1e;
-    border-radius: 0.5rem;
+    background: var(--gray-900);
+    border-radius: var(--radius-lg);
     padding: 1.25rem;
     overflow-x: auto;
     margin: 1em 0;
@@ -650,7 +742,7 @@
 
 .mk-pre .mk-code {
     background: transparent;
-    color: #d4d4d4;
+    color: var(--gray-300);
     padding: 0;
     font-size: 0.875rem;
 }
@@ -666,16 +758,16 @@
 }
 
 .mk-blockquote {
-    border-left: 4px solid #f74c00;
+    border-left: 4px solid var(--primary-500);
     padding: 0.5em 1em;
     margin: 1em 0;
-    background: #fff5f0;
-    color: #525252;
-    border-radius: 0 0.375rem 0.375rem 0;
+    background: var(--primary-50);
+    color: var(--text-muted);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
 }
 
 .mk-a {
-    color: #f74c00;
+    color: var(--primary-500);
     text-decoration: none;
 }
 
@@ -686,7 +778,7 @@
 .mk-img {
     max-width: 100%;
     height: auto;
-    border-radius: 0.375rem;
+    border-radius: var(--radius-md);
 }
 
 .mk-table {
@@ -696,20 +788,20 @@
 }
 
 .mk-th {
-    background: #f5f5f5;
+    background: var(--surface-subtle);
     font-weight: 600;
 }
 
 .mk-th,
 .mk-td {
-    border: 1px solid #e5e5e5;
+    border: 1px solid var(--surface-border);
     padding: 0.5em 0.75em;
     text-align: left;
 }
 
 .mk-hr {
     border: none;
-    border-top: 2px solid #e5e5e5;
+    border-top: 2px solid var(--surface-border);
     margin: 2em 0;
 }
 
@@ -718,21 +810,11 @@
    ============================================================ */
 
 .registry-footer {
-    border-top: 1px solid #e5e5e5;
+    border-top: 1px solid var(--surface-border);
     padding: 1.5rem;
-    text-align: center;
-    color: #a3a3a3;
+    color: var(--text-faint);
     font-size: 0.875rem;
     margin-top: 4rem;
-}
-
-.registry-footer a {
-    color: #737373;
-    text-decoration: none;
-}
-
-.registry-footer a:hover {
-    color: #f74c00;
 }
 
 .registry-footer-inner {

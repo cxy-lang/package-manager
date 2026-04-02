@@ -1,4 +1,4 @@
-module api_keys
+module my_keys
 
 import plugin "cxyml" as cxyml
 import { View } from "@cxyml"
@@ -8,7 +8,7 @@ import { KeyForm } from "../../components/apikeys/key-form.cxy"
 import { KeyResult } from "../../components/apikeys/key-result.cxy"
 import { KeyTable } from "../../components/apikeys/key-table.cxy"
 
-pub class ApiKeysPage: View {
+pub class MyKeysPage: View {
     _keys: Vector[ApiKey]
 
     func `init`(keys: Vector[ApiKey]) {
@@ -18,21 +18,21 @@ pub class ApiKeysPage: View {
     @override
     func render(os: &OutputStream): void {
         cxyml::render("""
-            <div class="admin-container">
+            <div class="registry-container">
                 <div class="page-header">
                     <div class="page-header-row">
                         <div>
-                            <h1>API Keys</h1>
-                            <p>Create and manage API keys for publishing packages programmatically</p>
+                            <h1>My API Keys</h1>
+                            <p>Create and manage your API keys for publishing packages</p>
                         </div>
                         <button type="button" class="btn btn-primary" id="new-key-btn">
                             + New Key
                         </button>
                     </div>
                 </div>
-                <KeyForm showAdminScope={{true}} />
+                <KeyForm showAdminScope={{false}} />
                 <KeyResult />
-                <KeyTable keys={{&_keys}} canRevoke={{true}} showUser={{true}} />
+                <KeyTable keys={{&_keys}} canRevoke={{true}} showUser={{false}} />
             </div>
         """)
     }

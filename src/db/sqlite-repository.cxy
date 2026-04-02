@@ -75,6 +75,9 @@ pub class SQLitePackageRepository: PackageRepository {
         _db.exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS promoted_by_id INTEGER DEFAULT 0") catch discard
         _db.exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS promoted_at TEXT") catch discard
         _db.exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS promoted_by_login TEXT") catch discard
+
+        // Migrations: add new columns to packages table if not present
+        _db.exec("ALTER TABLE packages ADD COLUMN IF NOT EXISTS owner_user_id INTEGER NOT NULL DEFAULT 0") catch discard
     }
 
 
@@ -121,7 +124,7 @@ pub class SQLitePackageRepository: PackageRepository {
             var sql = "SELECT name, description, author, license, repository, ".S
             sql << "(SELECT version FROM versions v WHERE v.package_id = p.id AND v.yanked = 0 "
             sql << "ORDER BY v.published_at DESC LIMIT 1) as latest_version, "
-            sql << "total_downloads, updated_at FROM packages p ORDER BY "
+            sql << "total_downloads, updated_at, owner_user_id FROM packages p ORDER BY "
             sql << orderBy
             sql << " LIMIT ? OFFSET ?"
 
@@ -136,14 +139,15 @@ pub class SQLitePackageRepository: PackageRepository {
                     repository:      String(stmt.column[string](4)),
                     latest_version:  String(stmt.column[string](5)),
                     total_downloads: stmt.column[i64](6),
-                    updated_at:      String(stmt.column[string](7))
+                    updated_at:      String(stmt.column[string](7)),
+                    owner_user_id:   stmt.column[i64](8) catch 0
                 })
             }
         } else {
             var sql = "SELECT p.name, p.description, p.author, p.license, p.repository, ".S
             sql << "(SELECT version FROM versions v WHERE v.package_id = p.id AND v.yanked = 0 "
             sql << "ORDER BY v.published_at DESC LIMIT 1) as latest_version, "
-            sql << "p.total_downloads, p.updated_at FROM packages p "
+            sql << "p.total_downloads, p.updated_at, p.owner_user_id FROM packages p "
             sql << "JOIN packages_fts fts ON fts.rowid = p.id WHERE packages_fts MATCH ? ORDER BY "
             sql << orderBy
             sql << " LIMIT ? OFFSET ?"
@@ -159,7 +163,8 @@ pub class SQLitePackageRepository: PackageRepository {
                     repository:      String(stmt.column[string](4)),
                     latest_version:  String(stmt.column[string](5)),
                     total_downloads: stmt.column[i64](6),
-                    updated_at:      String(stmt.column[string](7))
+                    updated_at:      String(stmt.column[string](7)),
+                    owner_user_id:   stmt.column[i64](8) catch 0
                 })
             }
         }
@@ -172,7 +177,7 @@ pub class SQLitePackageRepository: PackageRepository {
         // Get package
         var pkgStmt = _db.exec("""
             SELECT id, name, description, author, license, repository, homepage,
-                   readme, total_downloads, created_at, updated_at
+                   readme, total_downloads, created_at, updated_at, owner_user_id
             FROM packages WHERE name = ?
         """, name)
 
@@ -191,7 +196,8 @@ pub class SQLitePackageRepository: PackageRepository {
             readme:          String(pkgStmt.column[string](7)),
             total_downloads: pkgStmt.column[i64](8),
             created_at:      String(pkgStmt.column[string](9)),
-            updated_at:      String(pkgStmt.column[string](10))
+            updated_at:      String(pkgStmt.column[string](10)),
+            owner_user_id:   pkgStmt.column[i64](11) catch 0
         }
 
         // Get latest version
@@ -222,7 +228,7 @@ pub class SQLitePackageRepository: PackageRepository {
                    (SELECT version FROM versions v
                     WHERE v.package_id = p.id AND v.yanked = 0
                     ORDER BY v.published_at DESC LIMIT 1) as latest_version,
-                   total_downloads, updated_at
+                   total_downloads, updated_at, owner_user_id
             FROM packages p WHERE name = ?
         """, name)
 
@@ -238,7 +244,8 @@ pub class SQLitePackageRepository: PackageRepository {
             repository:      String(stmt.column[string](4)),
             latest_version:  String(stmt.column[string](5)),
             total_downloads: stmt.column[i64](6),
-            updated_at:      String(stmt.column[string](7))
+            updated_at:      String(stmt.column[string](7)),
+            owner_user_id:   stmt.column[i64](8) catch 0
         })
     }
 
@@ -263,7 +270,7 @@ pub class SQLitePackageRepository: PackageRepository {
                    (SELECT version FROM versions v
                     WHERE v.package_id = p.id AND v.yanked = 0
                     ORDER BY v.published_at DESC LIMIT 1) as latest_version,
-                   total_downloads, updated_at
+                   total_downloads, updated_at, owner_user_id
             FROM packages p
             ORDER BY created_at DESC
             LIMIT ?
@@ -278,7 +285,8 @@ pub class SQLitePackageRepository: PackageRepository {
                 repository:      String(stmt.column[string](4)),
                 latest_version:  String(stmt.column[string](5)),
                 total_downloads: stmt.column[i64](6),
-                updated_at:      String(stmt.column[string](7))
+                updated_at:      String(stmt.column[string](7)),
+                owner_user_id:   stmt.column[i64](8) catch 0
             })
         }
 
@@ -293,7 +301,7 @@ pub class SQLitePackageRepository: PackageRepository {
                    (SELECT version FROM versions v
                     WHERE v.package_id = p.id AND v.yanked = 0
                     ORDER BY v.published_at DESC LIMIT 1) as latest_version,
-                   total_downloads, updated_at
+                   total_downloads, updated_at, owner_user_id
             FROM packages p
             ORDER BY total_downloads DESC
             LIMIT ?
@@ -308,7 +316,8 @@ pub class SQLitePackageRepository: PackageRepository {
                 repository:      String(stmt.column[string](4)),
                 latest_version:  String(stmt.column[string](5)),
                 total_downloads: stmt.column[i64](6),
-                updated_at:      String(stmt.column[string](7))
+                updated_at:      String(stmt.column[string](7)),
+                owner_user_id:   stmt.column[i64](8) catch 0
             })
         }
 
@@ -444,7 +453,7 @@ pub class SQLitePackageRepository: PackageRepository {
     // -----------------------------------------------------------------------
 
     @override
-    func publishPackage(req: &PublishRequest): !i64 {
+    func publishPackage(req: &PublishRequest, ownerId: i64): !i64 {
         var timestamp = timeNow()
 
         // Check if package exists
@@ -489,8 +498,8 @@ pub class SQLitePackageRepository: PackageRepository {
 
             _db.exec("""
                 INSERT INTO packages (name, description, author, license, repository,
-                                     homepage, readme, total_downloads, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+                                     homepage, readme, owner_user_id, total_downloads, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
             """,
                 req.metadata.name.str(),
                 req.metadata.description.str(),
@@ -499,6 +508,7 @@ pub class SQLitePackageRepository: PackageRepository {
                 req.repository.str(),
                 homepage,
                 readme,
+                ownerId,
                 timestamp.str(),
                 timestamp.str()
             )
@@ -557,6 +567,52 @@ pub class SQLitePackageRepository: PackageRepository {
     }
 
     @override
+    func getPackagesByOwner(userId: i64, limit: i32, offset: i32): !PackageSearchResult {
+        // Count total packages owned by this user
+        var countStmt = _db.exec(
+            "SELECT COUNT(*) FROM packages WHERE owner_user_id = ?",
+            userId
+        )
+        var total: i64 = 0
+        if countStmt.next() {
+            total = countStmt.column[i64](0) catch 0
+        }
+
+        var packages = Vector[PackageSummary]()
+
+        var stmt = _db.exec("""
+            SELECT p.name, p.description, p.author, p.license, p.repository,
+                   (SELECT v.version FROM versions v
+                    WHERE v.package_id = p.id AND v.yanked = 0
+                    ORDER BY v.published_at DESC LIMIT 1) AS latest_version,
+                   p.total_downloads, p.updated_at, p.owner_user_id
+            FROM packages p
+            WHERE p.owner_user_id = ?
+            ORDER BY p.updated_at DESC
+            LIMIT ? OFFSET ?
+        """, userId, limit, offset)
+
+        while stmt.next() {
+            var pkg = PackageSummary{
+                name: String(stmt.column[string](0)),
+                description: String(stmt.column[string](1)),
+                author: String(stmt.column[string](2)),
+                license: String(stmt.column[string](3)),
+                repository: String(stmt.column[string](4)),
+                latest_version: String(stmt.column[string](5)),
+                total_downloads: stmt.column[i64](6) catch 0,
+                updated_at: String(stmt.column[string](7)),
+                owner_user_id: stmt.column[i64](8) catch 0
+            }
+            packages.push(&&pkg)
+        }
+
+        return PackageSearchResult{
+            total: total,
+            packages: &&packages
+        }
+    }
+
     func yankVersion(packageName: __string, versionStr: __string): !void {
         _db.exec("""
             UPDATE versions
@@ -1071,7 +1127,7 @@ test "publishPackage - creates new package" {
         dependencies: &&deps
     }
 
-    var pkgId = repo.publishPackage(&request)
+    var pkgId = repo.publishPackage(&request, 0)
     ok!(pkgId > 0)
     ok!(repo.getTotalPackageCount() == 1)
 }
@@ -1101,7 +1157,7 @@ test "publishPackage - updates existing package" {
         dependencies: deps
     }
 
-    repo.publishPackage(&request1)
+    repo.publishPackage(&request1, 0)
 
     // Publish new version
     var metadata2 = PackageMetadata{
@@ -1124,7 +1180,7 @@ test "publishPackage - updates existing package" {
         dependencies: &&deps
     }
 
-    repo.publishPackage(&request2)
+    repo.publishPackage(&request2, 0)
 
     // Still only one package (updated)
     ok!(repo.getTotalPackageCount() == 1)
@@ -1159,7 +1215,7 @@ test "getPackage - returns package details" {
         dependencies: &&deps
     }
 
-    repo.publishPackage(&request)
+    repo.publishPackage(&request, 0)
 
     var detailsOpt = repo.getPackage("test-pkg")
     ok!(!!detailsOpt)
@@ -1205,7 +1261,7 @@ test "packageExists - returns true for existing package" {
         dependencies: &&deps
     }
 
-    repo.publishPackage(&request)
+    repo.publishPackage(&request, 0)
 
     ok!(repo.packageExists("exists"))
     ok!(!repo.packageExists("nonexistent"))
@@ -1239,7 +1295,7 @@ test "searchPackages - empty query returns all packages" {
             dependencies: &&deps
         }
 
-        repo.publishPackage(&request)
+        repo.publishPackage(&request, 0)
     }
 
     var result = repo.searchPackages("", 10, 0, "name")
@@ -1272,7 +1328,7 @@ test "searchPackages - with query filters results" {
         dependencies: &&deps
     }
 
-    repo.publishPackage(&request)
+    repo.publishPackage(&request, 0)
 
     // Should find by name
     var result = repo.searchPackages("json", 10, 0, "name")
@@ -1305,7 +1361,7 @@ test "recordDownload - increments counters" {
         dependencies: &&deps
     }
 
-    repo.publishPackage(&request)
+    repo.publishPackage(&request, 0)
 
     ok!(repo.getTotalDownloadCount() == 0)
 
@@ -1341,7 +1397,7 @@ test "yankVersion - marks version as yanked" {
         dependencies: &&deps
     }
 
-    repo.publishPackage(&request)
+    repo.publishPackage(&request, 0)
 
     var versionOpt = repo.getVersion("test", "1.0.0")
     ok!(!!versionOpt)
@@ -1410,7 +1466,7 @@ test "getDependencies - returns dependencies for version" {
         dependencies: &&deps
     }
 
-    repo.publishPackage(&request)
+    repo.publishPackage(&request, 0)
 
     var retrievedDeps = repo.getDependenciesForVersion("test", "1.0.0")
     ok!(retrievedDeps.size() == 2)
@@ -1448,7 +1504,7 @@ test "getRecentPackages - returns recent packages" {
             dependencies: &&deps
         }
 
-        repo.publishPackage(&request)
+        repo.publishPackage(&request, 0)
     }
 
     var recent = repo.getRecentPackages(3)
@@ -1482,7 +1538,7 @@ test "listVersions - returns all versions sorted" {
             dependencies: Vector[DependencySpec]()
         }
 
-        repo.publishPackage(&request)
+        repo.publishPackage(&request, 0)
     }
 
     var allVersions = repo.listVersions("test")

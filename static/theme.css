@@ -315,3 +315,882 @@
     padding: 0.375rem 0.875rem;
     font-size: 0.875rem;
 }
+
+.btn-outline {
+    background: transparent;
+    border: 1px solid var(--surface-border);
+    color: var(--text-secondary);
+}
+
+.btn-outline:hover {
+    border-color: var(--primary-500);
+    color: var(--primary-500);
+    background: var(--primary-50);
+}
+
+/* ============================================================================
+   Page Header (shared)
+   ============================================================================ */
+
+.page-header {
+    margin-bottom: var(--space-xl);
+    padding-bottom: var(--space-lg);
+    border-bottom: 1px solid var(--page-border);
+}
+
+.page-header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: var(--space-xs);
+    color: var(--text-primary) !important;
+}
+
+.page-header p {
+    color: var(--text-muted) !important;
+    margin: 0;
+}
+
+.page-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: var(--space-lg);
+}
+
+/* ============================================================================
+   Forms (shared)
+   Pico handles: border, padding, border-radius, background, focus ring.
+   We keep: width, margin resets, and feedback states.
+   ============================================================================ */
+
+.form-group {
+    margin-bottom: var(--space-lg);
+}
+
+/* Pico styles <label>; we reinforce weight and spacing */
+.form-label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: var(--space-sm);
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+}
+
+/* Pico handles appearance; we ensure full-width and reset bottom margin */
+.form-input,
+.form-select,
+.form-textarea {
+    width: 100%;
+    margin-bottom: 0;
+}
+
+.form-textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+
+.form-help {
+    font-size: 0.875rem;
+    color: var(--gray-500);
+    margin-top: var(--space-sm);
+    line-height: 1.5;
+}
+
+.form-error {
+    background: var(--danger-50);
+    border: 1px solid var(--danger-200);
+    color: var(--danger-700);
+    padding: var(--space-md);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-lg);
+    font-size: 0.9375rem;
+    font-weight: 500;
+}
+
+.form-success {
+    background: var(--success-50);
+    border: 1px solid var(--success-200);
+    color: var(--success-700);
+    padding: var(--space-md);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-lg);
+    font-size: 0.9375rem;
+    font-weight: 500;
+}
+
+/* ============================================================================
+   Tables (shared)
+   Pico styles <table> natively; we override for our header/row design.
+   ============================================================================ */
+
+.table-wrapper {
+    overflow-x: auto;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--surface-border);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9375rem;
+    margin-bottom: 0; /* reset Pico table margin */
+}
+
+.data-table thead {
+    background: var(--thead-bg);
+    border-bottom: 2px solid var(--thead-border);
+}
+
+.data-table th {
+    text-align: left;
+    padding: var(--space-md);
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border: none;
+}
+
+.data-table td {
+    padding: var(--space-md);
+    color: var(--text-primary);
+    border: none;
+    border-bottom: 1px solid var(--surface-border);
+}
+
+.data-table tbody tr {
+    background: var(--surface-bg);
+    transition: background-color var(--transition);
+}
+
+.data-table tbody tr:hover {
+    background: var(--surface-hover);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.data-table a {
+    color: var(--primary-600);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color var(--transition);
+}
+
+.data-table a:hover {
+    color: var(--primary-600);
+    text-decoration: underline;
+}
+
+.package-name-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+}
+
+.package-link {
+    font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace;
+    font-weight: 600;
+    color: var(--primary-600);
+    text-decoration: none;
+    font-size: 0.9375rem;
+}
+
+.package-link:hover {
+    color: var(--primary-500);
+    text-decoration: underline;
+}
+
+.package-desc {
+    font-size: 0.8125rem;
+    color: var(--text-faint);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 400px;
+}
+
+/* ============================================================================
+   Badges (shared)
+   ============================================================================ */
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+    white-space: nowrap;
+}
+
+.badge-success {
+    background: var(--success-50);
+    color: var(--success-700);
+    border: 1px solid var(--success-200);
+}
+
+.badge-danger {
+    background: var(--danger-50);
+    color: var(--danger-700);
+    border: 1px solid var(--danger-200);
+}
+
+.badge-warning {
+    background: var(--warning-50);
+    color: var(--warning-700);
+    border: 1px solid var(--warning-300);
+}
+
+.badge-info {
+    background: var(--primary-50);
+    color: var(--primary-700);
+    border: 1px solid var(--primary-200);
+}
+
+/* ============================================================================
+   Cards (shared)
+   ============================================================================ */
+
+.card {
+    background: var(--surface-bg);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    margin-bottom: var(--space-lg);
+}
+
+.card-header {
+    font-size: 1.125rem;
+    font-weight: 700;
+    margin-bottom: var(--space-md);
+    padding-bottom: var(--space-md);
+    border-bottom: 1px solid var(--surface-border);
+    color: var(--text-primary);
+}
+
+.card-body {
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+/* ============================================================================
+   Action Buttons (shared)
+   ============================================================================ */
+
+.action-buttons {
+    display: flex;
+    gap: var(--space-sm);
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+/* ============================================================================
+   Token Display (shared)
+   ============================================================================ */
+
+.token-display {
+    background: var(--token-bg);
+    border: 1px solid var(--token-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    margin: var(--space-md) 0;
+    font-family:
+        "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas,
+        "Courier New", monospace;
+    font-size: 0.875rem;
+    word-break: break-all;
+    color: var(--token-color);
+    line-height: 1.6;
+}
+
+.token-warning {
+    background: var(--warning-50);
+    border: 1px solid var(--warning-300);
+    color: var(--warning-900);
+    padding: var(--space-md);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-md);
+}
+
+.token-warning strong {
+    display: block;
+    margin-bottom: var(--space-sm);
+    font-weight: 700;
+}
+
+/* ============================================================================
+   Empty State (shared)
+   ============================================================================ */
+
+.empty-state {
+    text-align: center;
+    padding: var(--space-2xl) var(--space-xl);
+    color: var(--gray-500);
+}
+
+.empty-state-icon {
+    font-size: 3rem;
+    margin-bottom: var(--space-md);
+    opacity: 0.5;
+}
+
+.empty-state-text {
+    font-size: 1.125rem;
+    margin-bottom: var(--space-sm);
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+/* ============================================================================
+   Utility Classes (shared)
+   ============================================================================ */
+
+.text-center {
+    text-align: center;
+}
+.text-muted {
+    color: var(--gray-500);
+}
+
+.mt-1 {
+    margin-top: var(--space-sm);
+}
+.mt-2 {
+    margin-top: var(--space-md);
+}
+.mt-3 {
+    margin-top: var(--space-lg);
+}
+.mt-4 {
+    margin-top: var(--space-xl);
+}
+
+.mb-1 {
+    margin-bottom: var(--space-sm);
+}
+.mb-2 {
+    margin-bottom: var(--space-md);
+}
+.mb-3 {
+    margin-bottom: var(--space-lg);
+}
+.mb-4 {
+    margin-bottom: var(--space-xl);
+}
+
+.flex {
+    display: flex;
+}
+.flex-col {
+    flex-direction: column;
+}
+.items-center {
+    align-items: center;
+}
+.justify-center {
+    justify-content: center;
+}
+
+.gap-1 {
+    gap: var(--space-sm);
+}
+.gap-2 {
+    gap: var(--space-md);
+}
+.gap-3 {
+    gap: var(--space-lg);
+}
+
+/* ============================================================================
+   Lucide Icons (shared)
+   ============================================================================ */
+
+[data-lucide] {
+    width: 1em;
+    height: 1em;
+    vertical-align: -0.125em;
+    stroke-width: 1.75;
+    flex-shrink: 0;
+}
+
+.user-avatar-initials [data-lucide] {
+    width: 1rem;
+    height: 1rem;
+}
+
+.brand-icon {
+    width: 1.75rem;
+    height: 1.75rem;
+    color: var(--primary-600);
+    margin-right: 0.5rem;
+    flex-shrink: 0;
+}
+
+.admin-navbar-links [data-lucide] {
+    width: 1rem;
+    height: 1rem;
+    opacity: 0.75;
+    margin-right: 0.25rem;
+}
+
+.user-dropdown-item [data-lucide] {
+    width: 1rem;
+    height: 1rem;
+    opacity: 0.75;
+}
+
+.empty-state-icon [data-lucide] {
+    width: 3rem;
+    height: 3rem;
+    opacity: 0.35;
+    stroke-width: 1.25;
+}
+
+[data-lucide="alert-triangle"] {
+    width: 1.25rem;
+    height: 1.25rem;
+    color: var(--warning-600);
+    stroke-width: 2;
+    vertical-align: -0.2em;
+    margin-right: 0.375rem;
+}
+
+/* ============================================================================
+   Site Navbar (shared — used in admin and My dashboard)
+   ============================================================================ */
+
+.brand-logo {
+    display: flex;
+    flex-direction: column;
+    line-height: 1;
+    gap: 0.1rem;
+}
+
+.brand-cxy {
+    font-family:
+        "SF Mono", "Cascadia Code", "Fira Code", "JetBrains Mono",
+        "Roboto Mono", Consolas, monospace;
+    font-size: 1.375rem;
+    font-weight: 700;
+    color: var(--primary-600);
+    letter-spacing: -0.03em;
+}
+
+.brand-sub {
+    font-size: 0.5rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--gray-500);
+}
+
+[data-theme="dark"] .brand-sub {
+    color: var(--gray-400);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) .brand-sub {
+        color: var(--gray-400);
+    }
+}
+
+.site-navbar {
+    background: white;
+    border-bottom: 3px solid var(--primary-600);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    margin-bottom: 0;
+    padding: 0;
+}
+
+.site-navbar-inner {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: var(--space-md) var(--space-xl);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-xl);
+}
+
+.site-navbar-brand {
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    transition: opacity var(--transition);
+}
+
+.site-navbar-brand:hover {
+    text-decoration: none;
+    opacity: 0.85;
+}
+
+.site-navbar-links {
+    display: flex;
+    list-style: none;
+    gap: var(--space-xs);
+    align-items: center;
+    padding: 0;
+    margin: 0;
+}
+
+.site-navbar-links a,
+.site-navbar-links button {
+    color: var(--gray-700);
+    text-decoration: none;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    transition: all var(--transition);
+    font-weight: 500;
+    font-size: 0.9375rem;
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.site-navbar-links a:hover,
+.site-navbar-links button:hover {
+    background: var(--gray-100);
+    color: var(--gray-900);
+    text-decoration: none;
+}
+
+.site-navbar-links a.active {
+    background: var(--primary-50);
+    color: var(--primary-700);
+    font-weight: 600;
+}
+
+.site-navbar-links [data-lucide] {
+    width: 1rem;
+    height: 1rem;
+    opacity: 0.75;
+    margin-right: 0.25rem;
+}
+
+.site-navbar-user {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+    position: relative;
+}
+
+/* Dark theme overrides */
+[data-theme="dark"] .site-navbar {
+    background: var(--gray-800);
+    border-bottom-color: var(--primary-500);
+}
+
+[data-theme="dark"] .site-navbar-brand {
+    color: var(--gray-100);
+}
+
+[data-theme="dark"] .site-navbar-links a,
+[data-theme="dark"] .site-navbar-links button {
+    color: var(--gray-300);
+}
+
+[data-theme="dark"] .site-navbar-links a:hover,
+[data-theme="dark"] .site-navbar-links button:hover {
+    background: var(--gray-700);
+    color: var(--gray-100);
+}
+
+[data-theme="dark"] .site-navbar-links a.active {
+    background: rgba(247, 76, 0, 0.15);
+    color: var(--primary-400);
+}
+
+/* System dark mode (no data-theme set) */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) .site-navbar {
+        background: var(--gray-800);
+        border-bottom-color: var(--primary-500);
+    }
+
+    :root:not([data-theme]) .site-navbar-links a,
+    :root:not([data-theme]) .site-navbar-links button {
+        color: var(--gray-300);
+    }
+
+    :root:not([data-theme]) .site-navbar-links a:hover,
+    :root:not([data-theme]) .site-navbar-links button:hover {
+        background: var(--gray-700);
+        color: var(--gray-100);
+    }
+}
+
+/* ============================================================================
+   User Menu (shared — used in admin navbar and My/public nav)
+   ============================================================================ */
+
+.admin-navbar-user {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+    position: relative;
+}
+
+.user-menu {
+    position: relative;
+    outline: none;
+}
+
+.user-avatar-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-md);
+    color: var(--gray-700);
+    font-size: 0.9375rem;
+    font-weight: 500;
+    transition:
+        background var(--transition),
+        color var(--transition);
+    margin: 0;
+    width: auto;
+}
+
+.user-avatar-btn:hover {
+    background: var(--gray-100);
+    color: var(--gray-900);
+}
+
+.user-avatar-img {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--gray-200);
+    flex-shrink: 0;
+}
+
+.user-avatar-initials {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background: var(--primary-600);
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.user-avatar-name {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.user-avatar-caret {
+    font-size: 0.75rem;
+    color: var(--gray-400);
+    margin-left: 2px;
+}
+
+.user-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + var(--space-xs));
+    right: 0;
+    min-width: 200px;
+    background: #fff;
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+    z-index: 200;
+    padding: var(--space-xs) 0;
+    overflow: hidden;
+}
+
+.user-menu:focus-within .user-dropdown {
+    display: block;
+}
+
+.user-dropdown-section {
+    padding: var(--space-xs) var(--space-sm);
+}
+
+.user-dropdown-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--gray-400);
+    padding: var(--space-xs) var(--space-sm);
+    margin: 0;
+}
+
+.user-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: var(--space-sm) var(--space-md);
+    font-size: 0.9375rem;
+    color: var(--gray-700);
+    text-align: left;
+    border-radius: 0;
+    transition:
+        background var(--transition),
+        color var(--transition);
+    margin: 0;
+    text-decoration: none;
+}
+
+.user-dropdown-item:hover {
+    background: var(--gray-100);
+    color: var(--gray-900);
+    text-decoration: none;
+}
+
+.user-dropdown-divider {
+    border: none;
+    border-top: 1px solid var(--gray-200);
+    margin: var(--space-xs) 0;
+}
+
+.user-dropdown-logout {
+    color: var(--danger-600);
+}
+
+.user-dropdown-logout:hover {
+    background: var(--danger-50);
+    color: var(--danger-700);
+}
+
+/* Dark theme overrides for user menu */
+[data-theme="dark"] .user-avatar-btn {
+    color: var(--gray-200);
+}
+
+[data-theme="dark"] .user-avatar-btn:hover {
+    background: var(--gray-700);
+}
+
+[data-theme="dark"] .user-dropdown {
+    background: var(--gray-800);
+    border-color: var(--gray-600);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+}
+
+[data-theme="dark"] .user-dropdown-item {
+    color: var(--gray-200);
+}
+
+[data-theme="dark"] .user-dropdown-item:hover {
+    background: var(--gray-700);
+    color: var(--gray-100);
+}
+
+[data-theme="dark"] .user-dropdown-label {
+    color: var(--gray-500);
+}
+
+[data-theme="dark"] .user-dropdown-divider {
+    border-color: var(--gray-600);
+}
+
+[data-theme="dark"] .user-avatar-initials {
+    background: var(--primary-700);
+}
+
+/* ============================================================================
+   Footer (shared — used in My dashboard and public registry)
+   ============================================================================ */
+
+.footer-inner {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 2rem;
+}
+
+.footer-brand {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.footer-title {
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.footer-links {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    align-items: flex-start;
+}
+
+.footer-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: var(--text-faint);
+    text-decoration: none;
+    font-size: 0.8125rem;
+    transition: color 150ms ease;
+}
+
+.footer-link:hover {
+    color: var(--primary-500);
+    text-decoration: none;
+}
+
+.footer-link [data-lucide] {
+    width: 0.875rem;
+    height: 0.875rem;
+}
+
+.footer-nav {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.375rem;
+}
+
+/* ============================================================================
+   Responsive Overrides (shared)
+   ============================================================================ */
+
+@media (max-width: 768px) {
+    .page-header h1 {
+        font-size: 1.5rem;
+    }
+
+    .page-header-row {
+        flex-direction: column;
+        gap: var(--space-md);
+    }
+
+    .data-table {
+        font-size: 0.875rem;
+    }
+
+    .data-table th,
+    .data-table td {
+        padding: var(--space-sm);
+    }
+}

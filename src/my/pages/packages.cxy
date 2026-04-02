@@ -1,0 +1,81 @@
+module my_packages
+
+import plugin "cxyml" as cxyml
+import { View } from "@cxyml"
+import { PackageSearchResult } from "../../models.cxy"
+
+pub class MyPackagesPage: View {
+    _result: PackageSearchResult
+
+    func `init`(result: PackageSearchResult) {
+        _result = &&result
+    }
+
+    @override
+    func render(os: &OutputStream): void {
+        cxyml::render("""
+            <div class="registry-container">
+                <div class="page-header">
+                    <div class="page-header-row">
+                        <div>
+                            <h1>My Packages</h1>
+                            <p>Packages you have published to the registry</p>
+                        </div>
+                    </div>
+                </div>
+
+                {{ if _result.total == 0 }}
+                <div class="empty-state">
+                    <i data-lucide="package" style="width: 48px; height: 48px; opacity: 0.3;"></i>
+                    <h3>No packages yet</h3>
+                    <p>Packages you publish using the Cxy CLI will appear here.</p>
+                    <pre><code>cxy package publish</code></pre>
+                </div>
+                {{ else }}
+                <div class="card">
+                    <div class="card-header">
+                        <span>{{ _result.total }}&#32;{{ __string(_result.total == 1 ? "package" : "packages") }}</span>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Package</th>
+                                <th>Latest Version</th>
+                                <th>Downloads</th>
+                                <th>Updated</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {{ for pkg in _result.packages }}
+                            <tr>
+                                <td>
+                                    <div class="package-name-cell">
+                                        <a href={{ f"/my/packages/{pkg.0.name}" }} class="package-link">{{ pkg.0.name }}</a>
+                                        {{ if pkg.0.description != null && !pkg.0.description.empty() }}
+                                        <span class="package-desc text-muted">{{ pkg.0.description }}</span>
+                                        {{ /if }}
+                                    </div>
+                                </td>
+                                <td>
+                                    {{ if pkg.0.latest_version != null && !pkg.0.latest_version.empty() }}
+                                    <span class="badge badge-info">v{{ pkg.0.latest_version }}</span>
+                                    {{ else }}
+                                    <span class="text-muted">—</span>
+                                    {{ /if }}
+                                </td>
+                                <td>{{ pkg.0.total_downloads }}</td>
+                                <td class="text-muted">{{ pkg.0.updated_at }}</td>
+                                <td>
+                                    <a href={{ f"/my/packages/{pkg.0.name}" }} class="btn btn-sm btn-outline">View</a>
+                                </td>
+                            </tr>
+                            {{ /for }}
+                        </tbody>
+                    </table>
+                </div>
+                {{ /if }}
+            </div>
+        """)
+    }
+}

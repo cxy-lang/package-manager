@@ -1,0 +1,108 @@
+module apikeys_table
+
+import plugin "cxyml" as cxyml
+import { View } from "@cxyml"
+import { Vector } from "stdlib/vector.cxy"
+import { ApiKey } from "../../models.cxy"
+
+pub class KeyTable: View {
+    _keys: &Vector[ApiKey]
+    _canRevoke: bool
+    _showUser: bool
+
+    func `init`(keys: &Vector[ApiKey], canRevoke: bool, showUser: bool) {
+        _keys = keys
+        _canRevoke = canRevoke
+        _showUser = showUser
+    }
+
+    @override
+    func render(os: &OutputStream): void {
+        cxyml::render("""
+            {{ if _keys.empty() }}
+                <div class="card">
+                    <div class="card-body">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i data-lucide="key"></i>
+                            </div>
+                            <p class="empty-state-text">No API keys yet</p>
+                        </div>
+                    </div>
+                </div>
+            {{ else }}
+                <div class="card">
+                    <div class="table-wrapper">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Scopes</th>
+                                    {{ if _showUser }}
+                                        <th>User</th>
+                                    {{ /if }}
+                                    <th>Created</th>
+                                    <th>Last Used</th>
+                                    <th>Expires</th>
+                                    {{ if _canRevoke }}
+                                        <th>Actions</th>
+                                    {{ /if }}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{ for key in _keys }}
+                                    <tr>
+                                        <td>{{ key.0.name }}</td>
+                                        <td>
+                                            {{ for s in key.0.scopes }}
+                                                {{ if s.1 > 0 }}, {{ /if }}{{ s.0.__str() }}
+                                            {{ /for }}
+                                        </td>
+                                        {{ if _showUser }}
+                                            <td>
+                                                <span class="badge badge-info">User #{{ key.0.user_id }}</span>
+                                            </td>
+                                        {{ /if }}
+                                        <td>{{ key.0.created_at }}</td>
+                                        <td>
+                                            {{ if key.0.last_used == null || key.0.last_used.empty() }}
+                                                <span style="color: var(--text-muted)">Never</span>
+                                            {{ else }}
+                                                {{ key.0.last_used }}
+                                            {{ /if }}
+                                        </td>
+                                        <td>
+                                            {{ if key.0.expires_at == null || key.0.expires_at.empty() }}
+                                                <span style="color: var(--text-muted)">Never</span>
+                                            {{ else }}
+                                                {{ if key.0.isExpired() }}
+                                                    <span class="badge badge-danger">Expired</span>
+                                                    {{ key.0.expires_at }}
+                                                {{ else }}
+                                                    {{ key.0.expires_at }}
+                                                {{ /if }}
+                                            {{ /if }}
+                                        </td>
+                                        {{ if _canRevoke }}
+                                            <td>
+                                                <div class="action-buttons">
+                                                    <button
+                                                        type="button"
+                                                        class="btn btn-sm btn-danger"
+                                                        onclick={{ f"revokeApiKey({key.0.id}, '{key.0.name}')" }}
+                                                    >
+                                                        Revoke
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        {{ /if }}
+                                    </tr>
+                                {{ /for }}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            {{ /if }}
+        """)
+    }
+}

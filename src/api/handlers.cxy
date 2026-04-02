@@ -95,15 +95,17 @@ pub func packages(ep: &Endpoint): void {
         handleDownload(resp, ctx.repo, __copy!(*nameOpt), __copy!(*versionOpt))
     }))
 
-    // Publish package
-    ep("POST /api/v1/packages", (req: &const Request, resp: &Response) => {
+    // Publish package (requires any authenticated user or admin via API key)
+    auth.requireUser(ep("POST /api/v1/packages", (req: &const Request, resp: &Response) => {
         var ctx = ep.context[RepoProvider](req)
+        var authCtx = ep.context[AuthMiddleware](req)
+        var user = *authCtx.currentUser
         var request = parse[PublishRequest](req.body().__str()) catch {
             response.badRequest(resp, f"Invalid JSON: {ex!.what()}")
             return
         }
-        handlePublishPackage(resp, ctx.repo, &ctx.registryUrl, &request)
-    })
+        handlePublishPackage(resp, ctx.repo, &ctx.registryUrl, &request, user.id)
+    }))
 }
 
 /// Register user API key management endpoints
@@ -387,7 +389,7 @@ func handleDownload(resp: &Response, repo: &PackageRepository, name: __string, v
 }
 
 /// Publish package handler
-func handlePublishPackage(resp: &Response, repo: &PackageRepository, registryUrl: &String, request: &PublishRequest): void {
+func handlePublishPackage(resp: &Response, repo: &PackageRepository, registryUrl: &String, request: &PublishRequest, ownerId: i64): void {
     // Validate required metadata fields
     if request.metadata.name == null || request.metadata.name.empty() {
         response.badRequest(resp, "Missing required field: metadata.name".S)
@@ -398,7 +400,7 @@ func handlePublishPackage(resp: &Response, repo: &PackageRepository, registryUrl
         return
     }
 
-    var _ = repo.publishPackage(request) catch {
+    var _ = repo.publishPackage(request, ownerId) catch {
         response.internalError(resp, f"Publish failed: {ex!.what()}")
         return
     }

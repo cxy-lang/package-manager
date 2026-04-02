@@ -1,0 +1,39 @@
+module apikeys_result
+
+import plugin "cxyml" as cxyml
+import { View } from "@cxyml"
+
+pub class KeyResult: View {
+    func `init`() {}
+
+    @override
+    func render(os: &OutputStream): void {
+        cxyml::render("""
+            <div id="key-result" class="card" style="display:none">
+                <div class="card-header">New API Key Created</div>
+                <div class="card-body">
+                    <div class="token-warning">
+                        <strong><i data-lucide="alert-triangle"></i> Save this key now!</strong>
+                        This key will only be displayed once and cannot be retrieved later.
+                        Store it securely (e.g., in your CI/CD secrets or password manager).
+                    </div>
+                    <div class="token-display" id="generated-key"></div>
+                    <div class="action-buttons" style="margin-top: 1rem">
+                        <button type="button" class="btn btn-secondary" id="copy-key-btn">
+                            Copy to Clipboard
+                        </button>
+                        <button type="button" class="btn btn-primary" id="done-key-btn">
+                            Done
+                        </button>
+                    </div>
+                    <div style="margin-top: 1.5rem">
+                        <p><strong>Use this key in your CLI:</strong></p>
+                        <div class="token-display">export CXY_REGISTRY_TOKEN=&lt;key&gt;</div>
+                        <p style="margin-top: 1rem"><strong>Or in API requests:</strong></p>
+                        <div class="token-display">Authorization: Bearer &lt;key&gt;</div>
+                    </div>
+                </div>
+            </div>
+        """)
+    }
+}

@@ -11,16 +11,16 @@ builds:
 dependencies:
   - name: cxyml
     repository: https://github.com/cxy-lang/cxyml.git
-    version: '*'
+    version: "*"
     tag: v0.1.0
   - name: oauth
     repository: https://github.com/cxy-lang/oauth.git
-    version: '*'
+    version: "*"
     tag: v0.1.0
   - name: markdown
     repository: https://github.com/cxy-lang/markdown.git
-    version: '*'
-    tag: v0.1.0
+    version: "*"
+    tag: v0.1.1
 
 tests:
   - file: "src/**/*.cxy"
@@ -33,7 +33,7 @@ scripts:
       - "{{BUILD_DIR}}/package-manager"
     command: cxy package build
   run-tests:
-    depends: [ build-app ]
+    depends: [build-app]
     command: |
       # Export custom secret
       export JWT_SECRET=my-custom-test-secret
@@ -62,13 +62,12 @@ scripts:
       fi
 
   release:
-    depends: [ build-app ]
+    depends: [build-app]
     command: |
       echo "Releasing..."
       mkdir -p {{BUILD_DIR}}/release
       cp -r {{BUILD_DIR}}/package-manager {{BUILD_DIR}}/release
       cp -r {{SOURCE_DIR}}/static {{BUILD_DIR}}/release/
-
 
 install:
   - name: disable-macos-wait-async-warning

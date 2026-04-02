@@ -13,10 +13,17 @@ CREATE TABLE IF NOT EXISTS packages (
     repository       TEXT    NOT NULL,
     homepage         TEXT,
     readme           TEXT,
+    owner_user_id    INTEGER NOT NULL DEFAULT 0,
     total_downloads  INTEGER NOT NULL DEFAULT 0,
     created_at       TEXT    NOT NULL,
     updated_at       TEXT    NOT NULL
 )
+"""
+
+/// Migration: add owner_user_id to packages table (for existing databases).
+/// Safe to run on a new database — the column will already exist from CREATE_PACKAGES_TABLE.
+pub const MIGRATE_ADD_OWNER_USER_ID = """
+ALTER TABLE packages ADD COLUMN owner_user_id INTEGER NOT NULL DEFAULT 0
 """
 
 pub const CREATE_PACKAGES_NAME_INDEX = """
@@ -29,6 +36,10 @@ CREATE INDEX IF NOT EXISTS idx_packages_updated ON packages (updated_at DESC)
 
 pub const CREATE_PACKAGES_DOWNLOADS_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_packages_downloads ON packages (total_downloads DESC)
+"""
+
+pub const CREATE_PACKAGES_OWNER_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_packages_owner ON packages (owner_user_id)
 """
 
 pub const CREATE_VERSIONS_TABLE = "CREATE TABLE IF NOT EXISTS versions (id INTEGER PRIMARY KEY AUTOINCREMENT, package_id INTEGER NOT NULL, version TEXT NOT NULL, tag TEXT, \"commit\" TEXT NOT NULL, checksum TEXT NOT NULL, yanked INTEGER NOT NULL DEFAULT 0, downloads INTEGER NOT NULL DEFAULT 0, published_at TEXT NOT NULL, UNIQUE (package_id, version))"
@@ -148,6 +159,7 @@ pub const SCHEMA_STATEMENTS = [
     CREATE_PACKAGES_NAME_INDEX,
     CREATE_PACKAGES_UPDATED_INDEX,
     CREATE_PACKAGES_DOWNLOADS_INDEX,
+    CREATE_PACKAGES_OWNER_INDEX,
     CREATE_VERSIONS_TABLE,
     CREATE_VERSIONS_PACKAGE_INDEX,
     CREATE_VERSIONS_PUBLISHED_INDEX,

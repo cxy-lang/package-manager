@@ -7,6 +7,7 @@ import { RepoProvider, AuthMiddleware } from "./src/api/middleware.cxy"
 import { Endpoint, health, packages, admin, userKeys } from "./src/api/handlers.cxy"
 import { adminUI } from "./src/admin/handlers.cxy"
 import { publicUI } from "./src/public/handlers.cxy"
+import { myUI } from "./src/my/handlers.cxy"
 import { initOAuthClient, registerAuthRoutes } from "./src/api/auth.cxy"
 import { parse as parseConfig } from "./src/config.cxy"
 
@@ -74,6 +75,7 @@ func main(args: [string]): !void {
     userKeys(&server)
     admin(&server)
     adminUI(&server)
+    myUI(&server, &md)
     publicUI(&server, config.pageSize, &md, config.markdownCacheDir)
 
     // Start server

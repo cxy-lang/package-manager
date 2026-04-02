@@ -1,0 +1,71 @@
+module apikeys_form
+
+import plugin "cxyml" as cxyml
+import { View } from "@cxyml"
+
+pub class KeyForm: View {
+    _showAdminScope: bool
+
+    func `init`(showAdminScope: bool) {
+        _showAdminScope = showAdminScope
+    }
+
+    @override
+    func render(os: &OutputStream): void {
+        cxyml::render("""
+            <div id="create-key-panel" class="card" style="display:none">
+                <div class="card-header">Create New API Key</div>
+
+                <div id="key-error" class="form-error" style="display:none"></div>
+
+                <form id="create-key-form" class="card-body">
+                    <div class="form-group">
+                        <label for="key-name" class="form-label">Key Name</label>
+                        <input
+                            type="text"
+                            id="key-name"
+                            name="name"
+                            class="form-input"
+                            placeholder="e.g., CI/CD Pipeline, Local Dev"
+                            required
+                        />
+                        <p class="form-help">A descriptive label to identify this key</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Scopes</label>
+                        <div class="checkbox-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="scopes" value="publish" checked />
+                                <span><strong>publish</strong> — Can publish packages</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="scopes" value="yank" />
+                                <span><strong>yank</strong> — Can yank/unyank versions</span>
+                            </label>
+                            {{ if _showAdminScope }}
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="scopes" value="admin" />
+                                    <span><strong>admin</strong> — Full admin access</span>
+                                </label>
+                            {{ /if }}
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="expires-at" class="form-label">Expiry Date (optional)</label>
+                        <input
+                            type="date"
+                            id="expires-at"
+                            name="expires_at"
+                            class="form-input"
+                        />
+                        <p class="form-help">Leave empty for a key that never expires</p>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Create API Key</button>
+                </form>
+            </div>
+        """)
+    }
+}

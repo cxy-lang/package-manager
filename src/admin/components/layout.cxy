@@ -47,6 +47,7 @@ pub class AdminLayout: View {
                 <link rel="stylesheet" href="/static/admin.css" />
                 <script src="https://cdn.jsdelivr.net/npm/flatpickr" defer></script>
                 <script src="https://unpkg.com/lucide@latest" defer></script>
+                <script src="/static/shared.js" defer></script>
                 <script src="/static/app.js" defer></script>
             </head>
             <body>

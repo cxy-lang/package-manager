@@ -33,7 +33,7 @@ pub class PackagePage: View {
                     <div class="registry-package-meta registry-package-meta--lg">
                         <span><i data-lucide="user"></i> {{ _pkg.pkg.author }}</span>
                         <span><i data-lucide="scale"></i> {{ _pkg.pkg.license }}</span>
-                        <span><i data-lucide="download"></i> {{ _pkg.pkg.total_downloads }} downloads</span>
+                        <span><i data-lucide="download"></i> {{ _pkg.pkg.total_downloads }}&#32;downloads</span>
                         <a href={{ _pkg.pkg.repository.__str() }} target="_blank" class="registry-meta-link">
                             <i data-lucide="github"></i> Repository
                         </a>

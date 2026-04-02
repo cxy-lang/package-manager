@@ -101,8 +101,9 @@ pub func registerAuthRoutes(ep: &AuthEndpoint): void {
         var cookieValue = f"session_token={sessionToken}; HttpOnly; Path=/; SameSite=Lax; Max-Age=2592000"
         resp.header("Set-Cookie", cookieValue.str())
 
-        // Return redirect target for JS to follow
-        var loginResp = LoginResponse("/admin".S)
+        // Return redirect target based on user role
+        var redirectUrl = user&.is_admin ? "/admin".S : "/my/packages".S
+        var loginResp = LoginResponse(redirectUrl)
         response.jsonResponse(resp, &loginResp)
     }))
 
@@ -191,13 +192,23 @@ pub func registerAuthRoutes(ep: &AuthEndpoint): void {
         // Clear OAuth state
         oauthClient&.clearState()
 
-        // Redirect to admin dashboard
-        resp.redirect("/admin")
+        // Redirect based on user role
+        if user.is_admin {
+            resp.redirect("/admin")
+        } else {
+            resp.redirect("/my/packages")
+        }
     })).setAttrs({parseQueryParams: true})
 
     // POST /auth/logout - Clear session
     auth.exempt(ep("POST /auth/logout", (@unused req: &const Request, resp: &Response) => {
         resp.header("Set-Cookie", "session_token=; HttpOnly; Path=/; Max-Age=0")
         resp.redirect("/auth/login")
+    }))
+
+    // GET /logout - Clear session (for public UI logout link)
+    auth.exempt(ep("GET /logout", (@unused req: &const Request, resp: &Response) => {
+        resp.header("Set-Cookie", "session_token=; HttpOnly; Path=/; Max-Age=0")
+        resp.redirect("/")
     }))
 }

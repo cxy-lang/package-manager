@@ -1,0 +1,62 @@
+module user_menu
+
+import plugin "cxyml" as cxyml
+import { View } from "@cxyml"
+import { User } from "../../models.cxy"
+
+pub class UserMenu: View {
+    _user: &User
+    _showViewSiteLink: bool
+
+    func `init`(user: &User, showViewSiteLink: bool) {
+        _user = user
+        _showViewSiteLink = showViewSiteLink
+    }
+
+    @override
+    func render(os: &OutputStream): void {
+        cxyml::render("""
+            <div class="user-menu" tabindex="0">
+                <button class="user-avatar-btn" type="button" aria-haspopup="true">
+                    {{ if !!_user.avatar_url && !_user.avatar_url&.empty() }}
+                        <img
+                            src={{ *_user.avatar_url }}
+                            alt={{ _user.login }}
+                            class="user-avatar-img"
+                        />
+                    {{ else }}
+                        <span class="user-avatar-initials">
+                            <i data-lucide="user"></i>
+                        </span>
+                    {{ /if }}
+                    <span class="user-avatar-name">{{ _user.login }}</span>
+                    <span class="user-avatar-caret">▾</span>
+                </button>
+                <div class="user-dropdown">
+                    <div class="user-dropdown-section">
+                        <p class="user-dropdown-label">Theme</p>
+                        <button type="button" class="user-dropdown-item" onclick="setTheme('light')">
+                            <i data-lucide="sun"></i> Light
+                        </button>
+                        <button type="button" class="user-dropdown-item" onclick="setTheme('dark')">
+                            <i data-lucide="moon"></i> Dark
+                        </button>
+                        <button type="button" class="user-dropdown-item" onclick="setTheme('system')">
+                            <i data-lucide="monitor"></i> System
+                        </button>
+                    </div>
+                    <div class="user-dropdown-divider"></div>
+                    {{ if _showViewSiteLink }}
+                        <a href="/" target="_blank" class="user-dropdown-item">
+                            <i data-lucide="external-link"></i> View Site
+                        </a>
+                        <div class="user-dropdown-divider"></div>
+                    {{ /if }}
+                    <button type="button" class="user-dropdown-item user-dropdown-logout" id="logout-btn">
+                        <i data-lucide="log-out"></i> Logout
+                    </button>
+                </div>
+            </div>
+        """)
+    }
+}

@@ -88,7 +88,11 @@ pub class PackageRepository {
     /// - Package name is unclaimed or owned by the same repository
     /// - Version doesn't already exist
     /// - Dependencies are valid
-    virtual func publishPackage(req: &PublishRequest): !i64
+    /// ownerId is the user ID of the publisher (0 for anonymous/legacy publishes).
+    virtual func publishPackage(req: &PublishRequest, ownerId: i64): !i64
+
+    /// Get packages owned by a specific user (paginated).
+    virtual func getPackagesByOwner(userId: i64, limit: i32, offset: i32): !PackageSearchResult
 
     /// Mark a version as yanked (not available for new installs).
     virtual func yankVersion(packageName: __string, versionStr: __string): !void

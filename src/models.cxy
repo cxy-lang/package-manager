@@ -75,6 +75,7 @@ pub struct ApiKey {
 @json
 pub struct Package {
     id:              i64 = 0
+    owner_user_id:   i64 = 0              // User ID of the publisher (0 = anonymous/legacy)
     name:            String = null
     description:     String = null
     author:          String = null
@@ -165,6 +166,7 @@ pub struct PackageSummary {
     latest_version:  String = null
     total_downloads: i64 = 0
     updated_at:      String = null
+    owner_user_id:   i64 = 0              // User ID of the publisher (0 = anonymous/legacy)
 }
 
 /// Version summary for version lists (without dependencies).
