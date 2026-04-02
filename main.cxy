@@ -1,9 +1,12 @@
 import { Server, Config } from "stdlib/http.cxy"
 import { FileServer, Config as FsConfig } from "stdlib/fserver.cxy"
 import { Address } from "stdlib/net.cxy"
+import { Markdown, MarkdownConfig } from "@markdown"
+import { Path } from "stdlib/path.cxy"
 import { RepoProvider, AuthMiddleware } from "./src/api/middleware.cxy"
 import { Endpoint, health, packages, admin, userKeys } from "./src/api/handlers.cxy"
 import { adminUI } from "./src/admin/handlers.cxy"
+import { publicUI } from "./src/public/handlers.cxy"
 import { initOAuthClient, registerAuthRoutes } from "./src/api/auth.cxy"
 import { parse as parseConfig } from "./src/config.cxy"
 
@@ -24,6 +27,7 @@ func main(args: [string]): !void {
     // Display startup configuration
     println("=====================================")
     println("  Cxy Package Registry Server")
+    println(f"Page Size:    {config.pageSize}")
     println("=====================================")
     println(f"Port:         {config.port}")
     println(f"Database:     {config.dbPath}")
@@ -59,6 +63,10 @@ func main(args: [string]): !void {
 
 
 
+    var md = Markdown(MarkdownConfig{
+        cacheDir: Path(config.markdownCacheDir)
+    })
+
     // Register routes
     registerAuthRoutes(&server)
     health(&server)
@@ -66,6 +74,7 @@ func main(args: [string]): !void {
     userKeys(&server)
     admin(&server)
     adminUI(&server)
+    publicUI(&server, config.pageSize, &md, config.markdownCacheDir)
 
     // Start server
     println(f"\nServer listening on port {config.port}")

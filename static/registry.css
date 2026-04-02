@@ -1,0 +1,774 @@
+/* ============================================================
+   Cxy Package Registry — Public Site Styles
+   Load order: pico.min.css → theme.css → registry.css
+   ============================================================ */
+
+/* Nav */
+.registry-nav {
+    background: white;
+    border-bottom: 1px solid #e5e5e5;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.registry-nav-inner {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0.75rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+}
+
+.registry-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-decoration: none;
+    flex-shrink: 0;
+}
+
+.registry-brand-icon {
+    width: 1.5rem;
+    height: 1.5rem;
+    color: #f74c00;
+}
+
+.registry-brand-logo {
+    display: flex;
+    flex-direction: column;
+    line-height: 1;
+    gap: 0.1rem;
+}
+
+.registry-brand-cxy {
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #f74c00;
+}
+
+.registry-brand-sub {
+    font-size: 0.5rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #737373;
+}
+
+.registry-admin-link {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    color: #737373;
+    text-decoration: none;
+    font-size: 0.875rem;
+    white-space: nowrap;
+}
+
+.registry-admin-link:hover {
+    color: #f74c00;
+}
+
+.registry-admin-link [data-lucide] {
+    width: 1rem;
+    height: 1rem;
+}
+
+/* ============================================================
+   Hero
+   ============================================================ */
+
+.registry-hero {
+    background: linear-gradient(135deg, #fff5f0 0%, #fff 60%);
+    border-bottom: 1px solid #ffe4d5;
+    padding: 4rem 1.5rem;
+    text-align: center;
+}
+
+.registry-hero-inner {
+    max-width: 700px;
+    margin: 0 auto;
+}
+
+.registry-hero-title {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: #171717;
+    margin-bottom: 0.75rem;
+}
+
+.registry-hero-subtitle {
+    font-size: 1.125rem;
+    color: #525252;
+    margin-bottom: 2rem;
+}
+
+.registry-hero-search {
+    width: 100%;
+}
+
+/* ============================================================
+   Container
+   ============================================================ */
+
+.registry-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+}
+
+/* ============================================================
+   Home grid
+   ============================================================ */
+
+.registry-home-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+}
+
+.registry-section-header {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #404040;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-bottom: 2px solid #f74c00;
+    padding-bottom: 0.5rem;
+}
+
+.registry-section-header [data-lucide] {
+    width: 1rem;
+    height: 1rem;
+    color: #f74c00;
+}
+
+/* ============================================================
+   Package cards (home)
+   ============================================================ */
+
+.registry-package-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.registry-package-card {
+    display: block;
+    padding: 1rem;
+    border: 1px solid #e5e5e5;
+    border-radius: 0.5rem;
+    text-decoration: none;
+    color: inherit;
+    transition: all 150ms ease;
+    background: white;
+}
+
+.registry-package-card:hover {
+    border-color: #f74c00;
+    box-shadow: 0 2px 8px rgba(247, 76, 0, 0.1);
+    text-decoration: none;
+}
+
+.registry-package-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.375rem;
+}
+
+.registry-package-name {
+    font-weight: 700;
+    font-size: 1rem;
+    color: #f74c00;
+    font-family: "SF Mono", "Fira Code", monospace;
+}
+
+.registry-package-version {
+    font-size: 0.75rem;
+    background: #fff5f0;
+    color: #f74c00;
+    border: 1px solid #ffc4a3;
+    border-radius: 0.25rem;
+    padding: 0.125rem 0.375rem;
+    font-weight: 600;
+}
+
+.registry-package-desc {
+    font-size: 0.875rem;
+    color: #525252;
+    margin: 0 0 0.5rem;
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.registry-package-meta {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.75rem;
+    color: #737373;
+    flex-wrap: wrap;
+}
+
+.registry-package-meta [data-lucide] {
+    width: 0.75rem;
+    height: 0.75rem;
+    vertical-align: -0.1em;
+}
+
+/* ============================================================
+   Search page
+   ============================================================ */
+
+.registry-search-page {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.registry-search-bar {
+    margin-bottom: 1.5rem;
+}
+
+.registry-search-bar form {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+}
+
+.registry-search-bar select {
+    width: auto;
+    min-width: 10rem;
+    flex-shrink: 0;
+    margin-bottom: 0;
+    border-radius: 105px;
+}
+
+.registry-search-bar input[type="search"] {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+.registry-results-count {
+    color: #737373;
+    font-size: 0.9375rem;
+    margin-bottom: 1rem;
+}
+
+.registry-results {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    border: 1px solid #e5e5e5;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    background: white;
+}
+
+.registry-result-item {
+    display: block;
+    padding: 1.25rem 1.5rem;
+    text-decoration: none;
+    color: inherit;
+    border-bottom: 1px solid #f5f5f5;
+    transition: background 150ms ease;
+}
+
+.registry-result-item:last-child {
+    border-bottom: none;
+}
+
+.registry-result-item:hover {
+    background: #fff5f0;
+    text-decoration: none;
+}
+
+.registry-result-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.375rem;
+}
+
+/* ============================================================
+   Pagination
+   ============================================================ */
+
+.registry-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 2rem;
+}
+
+.registry-page-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.5rem 1rem;
+    border: 1px solid #e5e5e5;
+    border-radius: 0.5rem;
+    text-decoration: none;
+    color: #404040;
+    font-size: 0.9375rem;
+    background: white;
+}
+
+.registry-page-btn:hover {
+    border-color: #f74c00;
+    color: #f74c00;
+    text-decoration: none;
+}
+
+.registry-page-info {
+    color: #737373;
+    font-size: 0.9375rem;
+}
+
+.registry-page-btn [data-lucide] {
+    width: 1rem;
+    height: 1rem;
+}
+
+/* ============================================================
+   Package detail header
+   ============================================================ */
+
+.registry-package-header {
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid #e5e5e5;
+}
+
+.registry-package-title {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.registry-package-title h1 {
+    font-size: 2rem;
+    font-weight: 800;
+    color: #171717;
+    margin: 0;
+    font-family: "SF Mono", "Fira Code", monospace;
+}
+
+.registry-package-version--lg {
+    font-size: 0.875rem;
+}
+
+.registry-package-tagline {
+    font-size: 1.125rem;
+    color: #525252;
+    margin: 0 0 1rem;
+}
+
+.registry-package-meta--lg {
+    font-size: 0.9375rem;
+    gap: 1.5rem;
+}
+
+.registry-meta-link {
+    color: #737373;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+
+.registry-meta-link:hover {
+    color: #f74c00;
+    text-decoration: none;
+}
+
+.registry-meta-link [data-lucide] {
+    width: 1rem;
+    height: 1rem;
+}
+
+/* ============================================================
+   Package detail layout
+   ============================================================ */
+
+.registry-package-layout {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 2rem;
+    align-items: start;
+}
+
+/* README */
+.registry-readme {
+    background: white;
+    border: 1px solid #e5e5e5;
+    border-radius: 0.5rem;
+    padding: 2rem;
+}
+
+/* ============================================================
+   Sidebar
+   ============================================================ */
+
+.registry-package-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.registry-sidebar-card {
+    background: white;
+    border: 1px solid #e5e5e5;
+    border-radius: 0.5rem;
+    padding: 1rem;
+}
+
+.registry-sidebar-card-title {
+    font-weight: 700;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #737373;
+    margin-bottom: 0.75rem;
+}
+
+.registry-install-cmd {
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 0.875rem;
+    background: #f5f5f5;
+    padding: 0.625rem 0.75rem;
+    border-radius: 0.375rem;
+    color: #171717;
+    margin-bottom: 0.5rem;
+    word-break: break-all;
+}
+
+.registry-copy-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    width: 100%;
+    justify-content: center;
+    padding: 0.5rem;
+    border: 1px solid #e5e5e5;
+    border-radius: 0.375rem;
+    background: white;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: #525252;
+}
+
+.registry-copy-btn:hover {
+    border-color: #f74c00;
+    color: #f74c00;
+}
+
+.registry-copy-btn [data-lucide] {
+    width: 0.875rem;
+    height: 0.875rem;
+}
+
+/* ============================================================
+   Versions list
+   ============================================================ */
+
+.registry-versions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.registry-version-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.registry-version-num {
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-weight: 600;
+    color: #171717;
+}
+
+.registry-version-yanked {
+    font-size: 0.7rem;
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+    border-radius: 0.25rem;
+    padding: 0.1rem 0.375rem;
+}
+
+.registry-version-date {
+    color: #a3a3a3;
+    font-size: 0.8rem;
+    margin-left: auto;
+}
+
+/* ============================================================
+   Dependencies
+   ============================================================ */
+
+.registry-dep-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.375rem 0;
+    border-bottom: 1px solid #f5f5f5;
+    font-size: 0.875rem;
+}
+
+.registry-dep-item:last-child {
+    border-bottom: none;
+}
+
+.registry-dep-name {
+    color: #f74c00;
+    text-decoration: none;
+    font-family: "SF Mono", "Fira Code", monospace;
+}
+
+.registry-dep-name:hover {
+    text-decoration: underline;
+}
+
+.registry-dep-version {
+    color: #737373;
+    font-size: 0.8rem;
+}
+
+/* ============================================================
+   Empty state
+   ============================================================ */
+
+.registry-empty {
+    text-align: center;
+    padding: 2rem;
+    color: #a3a3a3;
+}
+
+.registry-empty [data-lucide] {
+    width: 2.5rem;
+    height: 2.5rem;
+    margin-bottom: 0.5rem;
+    opacity: 0.4;
+}
+
+.registry-empty--lg {
+    padding: 4rem 2rem;
+}
+
+.registry-empty a {
+    color: #f74c00;
+    text-decoration: none;
+}
+
+.registry-empty a:hover {
+    text-decoration: underline;
+}
+
+/* ============================================================
+   Markdown output (mk-* classes from @markdown package)
+   ============================================================ */
+
+.mk-doc {
+    line-height: 1.7;
+    color: #262626;
+}
+
+.mk-h1,
+.mk-h2,
+.mk-h3,
+.mk-h4,
+.mk-h5,
+.mk-h6 {
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+    font-weight: 700;
+    line-height: 1.3;
+    color: #171717;
+}
+
+.mk-h1 {
+    font-size: 1.875rem;
+    border-bottom: 2px solid #e5e5e5;
+    padding-bottom: 0.375rem;
+}
+
+.mk-h2 {
+    font-size: 1.5rem;
+    border-bottom: 1px solid #e5e5e5;
+    padding-bottom: 0.25rem;
+}
+
+.mk-h3 {
+    font-size: 1.25rem;
+}
+
+.mk-h4 {
+    font-size: 1.125rem;
+}
+
+.mk-p {
+    margin: 1em 0;
+}
+
+.mk-strong {
+    font-weight: 700;
+}
+
+.mk-em {
+    font-style: italic;
+}
+
+.mk-code {
+    background: #f5f5f5;
+    padding: 0.2em 0.4em;
+    border-radius: 0.25rem;
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 0.875em;
+    color: #db3700;
+}
+
+.mk-pre {
+    background: #1e1e1e;
+    border-radius: 0.5rem;
+    padding: 1.25rem;
+    overflow-x: auto;
+    margin: 1em 0;
+}
+
+.mk-pre .mk-code {
+    background: transparent;
+    color: #d4d4d4;
+    padding: 0;
+    font-size: 0.875rem;
+}
+
+.mk-ul,
+.mk-ol {
+    margin: 0.75em 0;
+    padding-left: 1.75em;
+}
+
+.mk-li {
+    margin: 0.375em 0;
+}
+
+.mk-blockquote {
+    border-left: 4px solid #f74c00;
+    padding: 0.5em 1em;
+    margin: 1em 0;
+    background: #fff5f0;
+    color: #525252;
+    border-radius: 0 0.375rem 0.375rem 0;
+}
+
+.mk-a {
+    color: #f74c00;
+    text-decoration: none;
+}
+
+.mk-a:hover {
+    text-decoration: underline;
+}
+
+.mk-img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.375rem;
+}
+
+.mk-table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1em 0;
+}
+
+.mk-th {
+    background: #f5f5f5;
+    font-weight: 600;
+}
+
+.mk-th,
+.mk-td {
+    border: 1px solid #e5e5e5;
+    padding: 0.5em 0.75em;
+    text-align: left;
+}
+
+.mk-hr {
+    border: none;
+    border-top: 2px solid #e5e5e5;
+    margin: 2em 0;
+}
+
+/* ============================================================
+   Footer
+   ============================================================ */
+
+.registry-footer {
+    border-top: 1px solid #e5e5e5;
+    padding: 1.5rem;
+    text-align: center;
+    color: #a3a3a3;
+    font-size: 0.875rem;
+    margin-top: 4rem;
+}
+
+.registry-footer a {
+    color: #737373;
+    text-decoration: none;
+}
+
+.registry-footer a:hover {
+    color: #f74c00;
+}
+
+.registry-footer-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+
+@media (max-width: 768px) {
+    .registry-home-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .registry-package-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .registry-hero-title {
+        font-size: 1.75rem;
+    }
+
+    .registry-search-controls {
+        flex-wrap: wrap;
+    }
+
+    .registry-nav-inner {
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+
+    .registry-search-form {
+        order: 3;
+        flex: 1 1 100%;
+        max-width: 100%;
+    }
+}

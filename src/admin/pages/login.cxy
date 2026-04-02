@@ -13,12 +13,13 @@ pub class LoginPage: View {
     @override
     func render(os: &OutputStream): void {
         cxyml::render("""
-            <html lang="en" data-theme="light">
+            <html lang="en">
             <head>
                 <meta charset="UTF-8" />
                 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
                 <title>Admin Login - Cxy Registry</title>
                 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+                <link rel="stylesheet" href="/static/theme.css" />
                 <link rel="stylesheet" href="/static/admin.css" />
                 <script src="/static/app.js" defer></script>
             </head>

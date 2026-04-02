@@ -1,0 +1,74 @@
+module public_layout
+
+import plugin "cxyml" as cxyml
+import { View } from "@cxyml"
+
+pub struct PublicLayoutProps {
+    title: String = null
+    view: View = null
+    query: String = null   // pre-fill search bar if on search page
+}
+
+// Thin wrapper that delegates render to a referenced View.
+// Used by PublicLayout to render the page body content.
+class Content: View {
+    _view: &View
+
+    func `init`(view: &View) {
+        _view = view
+    }
+
+    @[inline, override]
+    func render(os: &OutputStream): void {
+        _view.render(os)
+    }
+}
+
+pub class PublicLayout: View {
+    _props: PublicLayoutProps
+
+    func `init`(props: PublicLayoutProps) {
+        _props = &&props
+    }
+
+    @override
+    func render(os: &OutputStream): void {
+        cxyml::render("""
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+                <title>{{ _props.title }} - Cxy Registry</title>
+                <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+                <link rel="stylesheet" href="/static/theme.css" />
+                <link rel="stylesheet" href="/static/registry.css" />
+                <script src="https://unpkg.com/lucide@latest" defer></script>
+                <script src="/static/registry.js" defer></script>
+            </head>
+            <body>
+                <nav class="registry-nav">
+                    <div class="registry-nav-inner">
+                        <a href="/" class="registry-brand">
+                            <i data-lucide="package" class="registry-brand-icon"></i>
+                            <div class="registry-brand-logo">
+                                <span class="registry-brand-cxy">cxy</span>
+                                <span class="registry-brand-sub">Registry</span>
+                            </div>
+                        </a>
+
+                        <a href="/admin" class="registry-admin-link">
+                            <i data-lucide="shield"></i> Admin
+                        </a>
+                    </div>
+                </nav>
+                <Content view={{&_props.view}} />
+                <footer class="registry-footer">
+                    <div class="registry-footer-inner">
+                        <p>Cxy Package Registry · <a href="/admin">Admin</a></p>
+                    </div>
+                </footer>
+            </body>
+            </html>
+        """)
+    }
+}

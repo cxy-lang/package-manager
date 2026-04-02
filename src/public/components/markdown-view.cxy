@@ -1,0 +1,28 @@
+module markdown_view
+
+import { View } from "@cxyml"
+import { Markdown } from "@markdown"
+
+pub struct MarkdownProps {
+    md: &Markdown
+    src: __string = "".s
+}
+
+pub class MarkdownView: View {
+    _props: MarkdownProps
+
+    func `init`(props: MarkdownProps) {
+        _props = &&props
+    }
+
+    @override
+    func render(os: &OutputStream): void {
+        if _props.src.empty() {
+            os << "<div class=\"registry-empty\"><p>No README available</p></div>"
+            return
+        }
+        _props.md.toHtml(os, _props.src) catch {
+            os << "<div class=\"registry-empty\"><p>Failed to render README</p></div>"
+        }
+    }
+}

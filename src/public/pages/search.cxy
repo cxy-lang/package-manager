@@ -1,0 +1,100 @@
+module public_search
+
+import plugin "cxyml" as cxyml
+import { View } from "@cxyml"
+import { Vector } from "stdlib/vector.cxy"
+import { PackageSummary } from "../../models.cxy"
+
+pub class SearchPage: View {
+    _packages: Vector[PackageSummary]
+    _query: String
+    _sort: String
+    _total: i64
+    _page: i32
+    _pageSize: i32
+
+    func `init`(packages: Vector[PackageSummary], query: String, sort: String, total: i64, page: i32, pageSize: i32) {
+        _packages = &&packages
+        _query = &&query
+        _sort = &&sort
+        _total = total
+        _page = page
+        _pageSize = pageSize
+    }
+
+    @override
+    func render(os: &OutputStream): void {
+        cxyml::render("""
+            <div class="registry-container">
+                <div class="registry-search-page">
+                    <div class="registry-search-bar">
+                        <form method="GET" action="/packages" class="registry-search-form-inline">
+                            <input
+                                type="search"
+                                name="q"
+                                placeholder="Search packages..."
+                                value={{ _query }}
+                                aria-label="Search packages"
+                            />
+                            <select name="sort" class="registry-sort-select" aria-label="Sort by">
+                                <option value="relevance">Relevance</option>
+                                <option value="downloads">Most Downloaded</option>
+                                <option value="updated">Recently Updated</option>
+                                <option value="name">Name</option>
+                            </select>
+                        </form>
+                    </div>
+
+                    <p class="registry-results-count">
+                        {{ _total }} package(s) found
+                        {{ if _query.size() > 0 }}
+                            for "{{ _query }}"
+                        {{ /if }}
+                    </p>
+
+                    {{ if _packages.empty() }}
+                        <div class="registry-empty registry-empty--lg">
+                            <i data-lucide="package-x"></i>
+                            <p>No packages found</p>
+                            {{ if _query.size() > 0 }}
+                                <a href="/packages">Clear search</a>
+                            {{ /if }}
+                        </div>
+                    {{ else }}
+                        <div class="registry-results">
+                            {{ for pkg in _packages }}
+                                <a href={{ f"/packages/{pkg.0.name}" }} class="registry-result-item">
+                                    <div class="registry-result-header">
+                                        <span class="registry-package-name">{{ pkg.0.name }}</span>
+                                        <span class="registry-package-version">{{ pkg.0.latest_version }}</span>
+                                    </div>
+                                    <p class="registry-package-desc">{{ pkg.0.description }}</p>
+                                    <div class="registry-package-meta">
+                                        <span><i data-lucide="user"></i> {{ pkg.0.author }}</span>
+                                        <span><i data-lucide="download"></i> {{ pkg.0.total_downloads }}</span>
+                                        <span><i data-lucide="scale"></i> {{ pkg.0.license }}</span>
+                                        <span><i data-lucide="clock"></i> {{ pkg.0.updated_at }}</span>
+                                    </div>
+                                </a>
+                            {{ /for }}
+                        </div>
+
+                        <div class="registry-pagination">
+                            {{ if _page > 1 }}
+                                <a href={{ f"/packages?q={_query}&sort={_sort}&page={_page - 1}" }} class="registry-page-btn">
+                                    <i data-lucide="chevron-left"></i> Prev
+                                </a>
+                            {{ /if }}
+                            <span class="registry-page-info">Page {{ _page }}</span>
+                            {{ if _total > _page * _pageSize }}
+                                <a href={{ f"/packages?q={_query}&sort={_sort}&page={_page + 1}" }} class="registry-page-btn">
+                                    Next <i data-lucide="chevron-right"></i>
+                                </a>
+                            {{ /if }}
+                        </div>
+                    {{ /if }}
+                </div>
+            </div>
+        """)
+    }
+}

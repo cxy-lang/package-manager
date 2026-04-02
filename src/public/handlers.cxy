@@ -1,0 +1,107 @@
+module public_handlers
+
+import { Server, Request, Response, Status } from "stdlib/http.cxy"
+import { Markdown } from "@markdown"
+import { RepoProvider, AuthMiddleware } from "../api/middleware.cxy"
+import { PublicLayout, PublicLayoutProps } from "./components/layout.cxy"
+import { HomePage } from "./pages/home.cxy"
+import { SearchPage } from "./pages/search.cxy"
+import { PackagePage } from "./pages/package.cxy"
+
+pub type PublicEndpoint = Server[RepoProvider, AuthMiddleware]
+
+pub func publicUI(ep: &PublicEndpoint, pageSize: i32, md: &Markdown, @unused cacheDir: __string): void {
+    var auth = ep.middleware[AuthMiddleware]()
+
+    // Home
+    auth.exempt(ep("GET /", (@unused req: &const Request, resp: &Response) => {
+        var ctx = ep.context[RepoProvider](req)
+        var repo = ctx.repo
+
+        var popular = repo.getPopularPackages(6) catch {
+            println("Error fetching popular packages: ", ex!.what())
+            resp.end(Status.InternalError)
+            return
+        }
+
+        var recent = repo.getRecentPackages(6) catch {
+            println("Error fetching recent packages: ", ex!.what())
+            resp.end(Status.InternalError)
+            return
+        }
+
+        var total = repo.getTotalPackageCount()
+
+        resp.header("Content-Type", "text/html; charset=utf-8")
+        var layout = PublicLayout(PublicLayoutProps{
+            title: "Home".S,
+            view: HomePage(&&popular, &&recent, total)
+        })
+        layout.render(resp.body())
+    }))
+
+    // Search / browse packages
+    auth.exempt(ep("GET /packages", (req: &const Request, resp: &Response) => {
+        var ctx = ep.context[RepoProvider](req)
+        var repo = ctx.repo
+
+        var query = req.qparam("q", "")
+        var sort = req.qparam("sort", "relevance")
+        var pageStr = req.qparam("page")
+        var page = !!pageStr ? pageStr&.toi[i32]() : 1 as i32
+        if page < 1 {
+            page = 1
+        }
+
+        var offset = (page - 1) * pageSize
+        var result = repo.searchPackages(query, pageSize, offset, sort) catch {
+            println("Error searching packages: ", ex!.what())
+            resp.end(Status.InternalError)
+            return
+        }
+
+        resp.header("Content-Type", "text/html; charset=utf-8")
+        var layout = PublicLayout(PublicLayoutProps{
+            title: "Packages".S,
+            view: SearchPage(&&result.packages, String(query), String(sort), result.total, page, pageSize),
+            query: String(query)
+        })
+        layout.render(resp.body())
+    }).setAttrs({ parseQueryParams: true }))
+
+    // Package detail
+    auth.exempt(ep("GET /packages/{name}", (req: &const Request, resp: &Response) => {
+        var ctx = ep.context[RepoProvider](req)
+        var repo = ctx.repo
+
+        var nameOpt = req.param("name")
+        if !nameOpt {
+            resp.end(Status.BadRequest)
+            return
+        }
+
+        var name = *nameOpt
+
+        var pkgOpt = repo.getPackage(__copy!(name)) catch {
+            println("Error fetching package: ", ex!.what())
+            resp.end(Status.InternalError)
+            return
+        }
+
+        if !pkgOpt {
+            resp.end(Status.NotFound)
+            resp.body() << "Package not found"
+            return
+        }
+
+        var pkg = *pkgOpt
+        var packageName = __copy!(pkg.pkg.name)
+
+        resp.header("Content-Type", "text/html; charset=utf-8")
+        var layout = PublicLayout(PublicLayoutProps{
+            title: __copy!(packageName),
+            view: PackagePage(&&pkg, md)
+        })
+        layout.render(resp.body())
+    }))
+}

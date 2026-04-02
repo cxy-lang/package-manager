@@ -31,9 +31,10 @@ function applyStoredTheme() {
   const saved = localStorage.getItem("cxy-theme");
   if (saved && saved !== "system") {
     document.documentElement.setAttribute("data-theme", saved);
+  } else {
+    // Remove data-theme to allow @media (prefers-color-scheme) to work
+    document.documentElement.removeAttribute("data-theme");
   }
-  // "system" or no preference: leave the data-theme="light" from the server
-  // and let Pico respect prefers-color-scheme via its own [data-theme] logic.
 }
 
 // Apply immediately (before DOMContentLoaded) to avoid theme flash

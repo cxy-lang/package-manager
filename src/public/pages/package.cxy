@@ -1,0 +1,95 @@
+module public_package
+
+import plugin "cxyml" as cxyml
+import { View } from "@cxyml"
+import { Markdown } from "@markdown"
+import { PackageDetails } from "../../models.cxy"
+import { MarkdownView, MarkdownProps } from "../components/markdown-view.cxy"
+
+pub class PackagePage: View {
+    _pkg: PackageDetails
+    _md: &Markdown
+
+    func `init`(pkg: PackageDetails, md: &Markdown) {
+        _pkg = &&pkg
+        _md = md
+    }
+
+    @override
+    func render(os: &OutputStream): void {
+        var mdProps = MarkdownProps{
+            md: _md,
+            src: _pkg.pkg.readme.__str()
+        }
+
+        cxyml::render("""
+            <div class="registry-container">
+                <div class="registry-package-header">
+                    <div class="registry-package-title">
+                        <h1>{{ _pkg.pkg.name }}</h1>
+                        <span class="registry-package-version registry-package-version--lg">{{ _pkg.latest.version }}</span>
+                    </div>
+                    <p class="registry-package-tagline">{{ _pkg.pkg.description }}</p>
+                    <div class="registry-package-meta registry-package-meta--lg">
+                        <span><i data-lucide="user"></i> {{ _pkg.pkg.author }}</span>
+                        <span><i data-lucide="scale"></i> {{ _pkg.pkg.license }}</span>
+                        <span><i data-lucide="download"></i> {{ _pkg.pkg.total_downloads }} downloads</span>
+                        <a href={{ _pkg.pkg.repository.__str() }} target="_blank" class="registry-meta-link">
+                            <i data-lucide="github"></i> Repository
+                        </a>
+                        {{ if _pkg.pkg.homepage != null && !_pkg.pkg.homepage.empty() }}
+                            <a href={{ _pkg.pkg.homepage.__str() }} target="_blank" class="registry-meta-link">
+                                <i data-lucide="external-link"></i> Homepage
+                            </a>
+                        {{ /if }}
+                    </div>
+                </div>
+
+                <div class="registry-package-layout">
+                    <div class="registry-package-main">
+                        <div class="registry-readme">
+                            <MarkdownView props={{mdProps}} />
+                        </div>
+                    </div>
+
+                    <div class="registry-package-sidebar">
+                        <div class="registry-sidebar-card">
+                            <div class="registry-sidebar-card-title">Install</div>
+                            <div class="registry-install-cmd">cxy package add {{ _pkg.pkg.name }}</div>
+                            <button class="registry-copy-btn" onclick={{ f"copyInstall('{_pkg.pkg.name}')" }}>
+                                <i data-lucide="copy"></i> Copy
+                            </button>
+                        </div>
+
+                        <div class="registry-sidebar-card">
+                            <div class="registry-sidebar-card-title">Versions</div>
+                            <div class="registry-versions">
+                                {{ for ver in _pkg.versions }}
+                                    <div class="registry-version-item">
+                                        <span class="registry-version-num">{{ ver.0.version }}</span>
+                                        {{ if ver.0.yanked }}
+                                            <span class="registry-version-yanked">yanked</span>
+                                        {{ /if }}
+                                        <span class="registry-version-date">{{ ver.0.published_at }}</span>
+                                    </div>
+                                {{ /for }}
+                            </div>
+                        </div>
+
+                        {{ if !_pkg.dependencies.empty() }}
+                            <div class="registry-sidebar-card">
+                                <div class="registry-sidebar-card-title">Dependencies</div>
+                                {{ for dep in _pkg.dependencies }}
+                                    <div class="registry-dep-item">
+                                        <a href={{ f"/packages/{dep.0.name}" }} class="registry-dep-name">{{ dep.0.name }}</a>
+                                        <span class="registry-dep-version">{{ dep.0.version_constraint }}</span>
+                                    </div>
+                                {{ /for }}
+                            </div>
+                        {{ /if }}
+                    </div>
+                </div>
+            </div>
+        """)
+    }
+}

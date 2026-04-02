@@ -1,0 +1,104 @@
+module public_home
+
+import plugin "cxyml" as cxyml
+import { View } from "@cxyml"
+import { Vector } from "stdlib/vector.cxy"
+import { PackageSummary } from "../../models.cxy"
+
+pub class HomePage: View {
+    _popular: Vector[PackageSummary]
+    _recent: Vector[PackageSummary]
+    _totalPackages: i64
+
+    func `init`(popular: Vector[PackageSummary], recent: Vector[PackageSummary], totalPackages: i64) {
+        _popular = &&popular
+        _recent = &&recent
+        _totalPackages = totalPackages
+    }
+
+    @override
+    func render(os: &OutputStream): void {
+        cxyml::render("""
+            <div class="registry-hero">
+                <div class="registry-hero-inner">
+                    <h1 class="registry-hero-title">
+                        The Cxy Package Registry
+                    </h1>
+                    <p class="registry-hero-subtitle">
+                        Discover and install packages for the Cxy programming language
+                    </p>
+                    <form method="GET" action="/packages">
+                        <input
+                            type="search"
+                            name="q"
+                            placeholder={{ f"Search {_totalPackages} packages..." }}
+                            aria-label="Search packages"
+                        />
+                    </form>
+                </div>
+            </div>
+
+            <div class="registry-container">
+                <div class="registry-home-grid">
+                    <div class="registry-section">
+                        <div class="registry-section-header">
+                            <i data-lucide="trending-up"></i> Popular Packages
+                        </div>
+                        {{ if _popular.empty() }}
+                            <div class="registry-empty">
+                                <i data-lucide="package"></i>
+                                <p>No packages yet</p>
+                            </div>
+                        {{ else }}
+                            <div class="registry-package-list">
+                                {{ for pkg in _popular }}
+                                    <a href={{ f"/packages/{pkg.0.name}" }} class="registry-package-card">
+                                        <div class="registry-package-card-header">
+                                            <span class="registry-package-name">{{ pkg.0.name }}</span>
+                                            <span class="registry-package-version">{{ pkg.0.latest_version }}</span>
+                                        </div>
+                                        <p class="registry-package-desc">{{ pkg.0.description }}</p>
+                                        <div class="registry-package-meta">
+                                            <span><i data-lucide="user"></i> {{ pkg.0.author }}</span>
+                                            <span><i data-lucide="download"></i> {{ pkg.0.total_downloads }}</span>
+                                            <span><i data-lucide="scale"></i> {{ pkg.0.license }}</span>
+                                        </div>
+                                    </a>
+                                {{ /for }}
+                            </div>
+                        {{ /if }}
+                    </div>
+
+                    <div class="registry-section">
+                        <div class="registry-section-header">
+                            <i data-lucide="clock"></i> Recently Published
+                        </div>
+                        {{ if _recent.empty() }}
+                            <div class="registry-empty">
+                                <i data-lucide="package"></i>
+                                <p>No packages yet</p>
+                            </div>
+                        {{ else }}
+                            <div class="registry-package-list">
+                                {{ for pkg in _recent }}
+                                    <a href={{ f"/packages/{pkg.0.name}" }} class="registry-package-card">
+                                        <div class="registry-package-card-header">
+                                            <span class="registry-package-name">{{ pkg.0.name }}</span>
+                                            <span class="registry-package-version">{{ pkg.0.latest_version }}</span>
+                                        </div>
+                                        <p class="registry-package-desc">{{ pkg.0.description }}</p>
+                                        <div class="registry-package-meta">
+                                            <span><i data-lucide="user"></i> {{ pkg.0.author }}</span>
+                                            <span><i data-lucide="download"></i> {{ pkg.0.total_downloads }}</span>
+                                            <span><i data-lucide="scale"></i> {{ pkg.0.license }}</span>
+                                        </div>
+                                    </a>
+                                {{ /for }}
+                            </div>
+                        {{ /if }}
+                    </div>
+                </div>
+            </div>
+        """)
+    }
+}

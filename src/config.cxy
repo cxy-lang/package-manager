@@ -16,6 +16,10 @@ pub struct Config {
 
     // Bootstrap admin password (optional - random if not set)
     adminPassword: String? = null
+
+    // Pagination
+    pageSize: i32 = 20
+    markdownCacheDir: __string = ".markdown-cache".s
 }
 
 exception ConfigError(msg: String) => msg.str()
@@ -106,6 +110,15 @@ pub func parse(@unused args: [string]): !Config {
     if !adminPasswordStr.empty() {
         config.adminPassword = String(adminPasswordStr)
     }
+
+    // Read PAGE_SIZE
+    var pageSizeStr = getenv("PAGE_SIZE", "20")
+    config.pageSize = pageSizeStr.toi[i32]()
+    if config.pageSize <= 0 {
+        config.pageSize = 20
+    }
+
+    config.markdownCacheDir = getenv("MARKDOWN_CACHE_DIR", ".markdown-cache")
 
     return config
 }
