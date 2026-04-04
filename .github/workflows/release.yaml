@@ -9,20 +9,20 @@ name: Create Release
 jobs:
   integration:
     runs-on: ubuntu-latest
-    container: suilteam/cxy:latest-ubuntu
+    container: suilteam/cxy:latest-alpine
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
 
       - name: Build
         run: |
+          apk add sqlite-dev
           cxy package install --verbose
           cxy package run integration --verbose
 
   release:
     needs: [integration]
     runs-on: ubuntu-latest
-    container: suilteam/cxy:latest-ubuntu
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
