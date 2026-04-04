@@ -1,0 +1,35 @@
+# Cxy build artifacts
+.cxy/build/
+.cxy/packages/
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+docs/
+README.md
+
+# Tests
+test/
+
+# macOS
+.DS_Store
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Docker files (no need to copy into the image)
+Dockerfile
+.dockerignore

@@ -1,0 +1,44 @@
+# Create a release when a release tag is created
+on:
+  push:
+    tags:
+      - "v*.*.*" # Push events to matching v*, i.e. v1.0, v20.15.10
+
+name: Create Release
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    container: suilteam/cxy:latest-ubuntu
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Build
+        run: |
+          cxy package install --verbose
+          cxy package run integration --verbose
+
+  release:
+    needs: [integration]
+    runs-on: ubuntu-latest
+    container: suilteam/cxy:latest-ubuntu
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Login to dockerhub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push to dockerhub
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            suilteam/package-manager:${{ github.ref_name }}
+            suilteam/package-manager:latest

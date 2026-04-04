@@ -1,0 +1,1176 @@
+openapi: 3.0.3
+
+info:
+  title: Cxy Package Registry API
+  description: |
+    REST API for the Cxy programming language package registry.
+
+    ## Authentication
+
+    Protected endpoints require one of:
+    - **Session cookie** — set after logging in via `/auth/login` or GitHub OAuth
+    - **Bearer token** — an API key passed as `Authorization: Bearer <key>`
+
+    Admin endpoints additionally require the authenticated user to have `is_admin = true`.
+  version: 1.0.0
+  contact:
+    name: Cxy Language
+    url: https://github.com/cxy-lang/cxy
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  - url: https://registry.cxy-lang.org
+    description: Production
+
+tags:
+  - name: Health
+    description: Server health check
+  - name: Packages
+    description: Browse, search, and publish packages
+  - name: Versions
+    description: Package version management
+  - name: Keys
+    description: API key management for the authenticated user
+  - name: Admin
+    description: Administrative operations (admin only)
+  - name: Auth
+    description: Authentication and session management
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+
+paths:
+  # ── Health ────────────────────────────────────────────────────────────────
+
+  /api/v1/health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Returns the server status and API version. Always public.
+      operationId: getHealth
+      responses:
+        "200":
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: ok
+                version: "1.0.0"
+
+  # ── Auth (API) ────────────────────────────────────────────────────────────
+
+  /api/v1/login:
+    get:
+      tags: [Auth]
+      summary: Validate API key
+      description: |
+        Validates the API key supplied in the `Authorization: Bearer <key>`
+        header and returns the associated user's profile.
+
+        Intended for use by the Cxy CLI to verify a key is valid before
+        attempting to publish a package.
+      operationId: validateApiKey
+      security:
+        - bearerToken: []
+      responses:
+        "200":
+          description: Key is valid — returns the associated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiLoginResponse"
+              example:
+                id: 1
+                login: dccarter
+                name: "DC Carter"
+                email: "dc@example.com"
+                avatar_url: "https://avatars.githubusercontent.com/u/2494852?v=4"
+                is_admin: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ── Packages ──────────────────────────────────────────────────────────────
+
+  /api/v1/packages:
+    get:
+      tags: [Packages]
+      summary: Search or list packages
+      description: |
+        Returns a paginated list of packages. When `q` is omitted all packages
+        are returned. Full-text search (FTS5) is used when `q` is provided.
+      operationId: searchPackages
+      parameters:
+        - name: q
+          in: query
+          description: Full-text search query (name, description, author)
+          required: false
+          schema:
+            type: string
+          example: json
+        - name: limit
+          in: query
+          description: Maximum number of results to return
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          description: Number of results to skip (for pagination)
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: sort
+          in: query
+          description: Sort order
+          required: false
+          schema:
+            type: string
+            enum: [relevance, downloads, updated, name]
+            default: relevance
+      responses:
+        "200":
+          description: Paginated package list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PackageSearchResult"
+
+    post:
+      tags: [Packages]
+      summary: Publish a package version
+      description: |
+        Publish a new package or a new version of an existing package.
+
+        Rules:
+        - If the package name is new it is created and ownership is assigned to the caller.
+        - If the package already exists the repository URL must match.
+        - The version string must not already exist for this package.
+
+        Requires authentication (session cookie or API key).
+      operationId: publishPackage
+      security:
+        - sessionCookie: []
+        - bearerToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublishRequest"
+            example:
+              repository: https://github.com/example/my-pkg
+              tag: v1.0.0
+              commit: abc123def456abc123def456abc123def456abc123
+              checksum: "sha256:4b5e6f7a8b9c0d1e2f3a4b5e6f7a8b9c0d1e2f3a"
+              metadata:
+                name: my-pkg
+                version: 1.0.0
+                description: An example package
+                author: dccarter
+                license: MIT
+                repository: https://github.com/example/my-pkg
+                homepage: https://example.com
+              readme: "# my-pkg\n\nAn example package."
+              dependencies:
+                - name: cxy-json
+                  repository: https://github.com/cxy-lang/cxy-json
+                  version_constraint: "^1.0.0"
+                  is_dev: false
+      responses:
+        "201":
+          description: Package version published successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublishResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/packages/{name}:
+    get:
+      tags: [Packages]
+      summary: Get package details
+      description: |
+        Returns full package details including the latest version, all version
+        summaries, and dependencies for the latest version.
+
+        Note: the `readme` field is always omitted from this response.
+        Use `GET /api/v1/packages/{name}/readme` to fetch the raw markdown.
+      operationId: getPackage
+      parameters:
+        - $ref: "#/components/parameters/PackageName"
+      responses:
+        "200":
+          description: Package details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PackageDetails"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/packages/{name}/readme:
+    get:
+      tags: [Packages]
+      summary: Get package README
+      description: |
+        Returns the raw markdown content of the package README.
+        The README is intentionally excluded from the package detail response
+        (`GET /api/v1/packages/{name}`) to keep it lightweight.
+      operationId: getPackageReadme
+      parameters:
+        - $ref: "#/components/parameters/PackageName"
+      responses:
+        "200":
+          description: Raw markdown content
+          content:
+            text/markdown:
+              schema:
+                type: string
+        "204":
+          description: Package exists but has no README
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ── Versions ──────────────────────────────────────────────────────────────
+
+  /api/v1/packages/{name}/versions:
+    get:
+      tags: [Versions]
+      summary: List all versions of a package
+      description: Returns all versions sorted by publish date (newest first).
+      operationId: listVersions
+      parameters:
+        - $ref: "#/components/parameters/PackageName"
+      responses:
+        "200":
+          description: Version list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionsResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/packages/{name}/{version}:
+    get:
+      tags: [Versions]
+      summary: Get a specific version
+      description: Returns full metadata for a single package version.
+      operationId: getVersion
+      parameters:
+        - $ref: "#/components/parameters/PackageName"
+        - $ref: "#/components/parameters/VersionString"
+      responses:
+        "200":
+          description: Version details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Version"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/packages/{name}/{version}/download:
+    post:
+      tags: [Versions]
+      summary: Record a download
+      description: |
+        Increments the download counter for the given version and the parent
+        package. Intended to be called by the Cxy CLI after a successful
+        package install. Fire-and-forget — always returns 204.
+      operationId: recordDownload
+      parameters:
+        - $ref: "#/components/parameters/PackageName"
+        - $ref: "#/components/parameters/VersionString"
+      responses:
+        "204":
+          description: Download recorded
+
+  # ── API Keys ──────────────────────────────────────────────────────────────
+
+  /api/v1/user/keys:
+    get:
+      tags: [Keys]
+      summary: List API keys
+      description: Returns all API keys belonging to the authenticated user.
+      operationId: listApiKeys
+      security:
+        - sessionCookie: []
+        - bearerToken: []
+      responses:
+        "200":
+          description: List of API keys
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiKey"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      tags: [Keys]
+      summary: Create an API key
+      description: |
+        Creates a new API key for the authenticated user.
+
+        The plain-text key is returned **only once** in this response and is
+        never stored. Save it immediately.
+
+        Only admin users may request the `admin` scope.
+      operationId: createApiKey
+      security:
+        - sessionCookie: []
+        - bearerToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateApiKeyRequest"
+            example:
+              name: CI publish key
+              scopes: [publish]
+              expires_at: "2026-01-01"
+      responses:
+        "201":
+          description: API key created. The `key` field is shown once only.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateApiKeyResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/user/keys/{id}:
+    delete:
+      tags: [Keys]
+      summary: Revoke an API key
+      description: |
+        Permanently revokes the API key with the given ID. The key must belong
+        to the authenticated user.
+      operationId: revokeApiKey
+      security:
+        - sessionCookie: []
+        - bearerToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: API key ID
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "204":
+          description: Key revoked
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/packages/{name}/{version}/yank:
+    post:
+      tags: [Versions]
+      summary: Yank a version
+      description: |
+        Marks a version as yanked. Yanked versions are excluded from new
+        installs but existing lock files that reference the version still
+        resolve correctly.
+
+        Requires the caller to be either the package owner or an admin.
+      operationId: yankVersion
+      security:
+        - sessionCookie: []
+        - bearerToken: []
+      parameters:
+        - $ref: "#/components/parameters/PackageName"
+        - $ref: "#/components/parameters/VersionString"
+      responses:
+        "200":
+          description: Version yanked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/packages/{name}/{version}/unyank:
+    post:
+      tags: [Versions]
+      summary: Unyank a version
+      description: |
+        Removes the yanked flag from a previously yanked version.
+
+        Requires the caller to be either the package owner or an admin.
+      operationId: unyankVersion
+      security:
+        - sessionCookie: []
+        - bearerToken: []
+      parameters:
+        - $ref: "#/components/parameters/PackageName"
+        - $ref: "#/components/parameters/VersionString"
+      responses:
+        "200":
+          description: Version unyanked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ── Admin ─────────────────────────────────────────────────────────────────
+
+  /api/v1/admin/users/{id}/make-admin:
+    post:
+      tags: [Admin]
+      summary: Grant admin privileges
+      description: |
+        Grants admin privileges to an existing GitHub user. Cannot be applied
+        to the currently authenticated user.
+      operationId: makeAdmin
+      security:
+        - sessionCookie: []
+        - bearerToken: []
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: Admin granted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/admin/users/{id}/revoke-admin:
+    post:
+      tags: [Admin]
+      summary: Revoke admin privileges
+      description: |
+        Removes admin privileges from a user. Cannot be applied to the
+        currently authenticated user.
+      operationId: revokeAdmin
+      security:
+        - sessionCookie: []
+        - bearerToken: []
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: Admin revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  # ── Auth ──────────────────────────────────────────────────────────────────
+
+  /auth/login:
+    get:
+      tags: [Auth]
+      summary: Login page
+      description: Renders the HTML login page (local + GitHub OAuth).
+      operationId: getLoginPage
+      responses:
+        "200":
+          description: HTML login page
+          content:
+            text/html:
+              schema:
+                type: string
+
+    post:
+      tags: [Auth]
+      summary: Local password login
+      description: |
+        Authenticates a local (non-GitHub) user with username and password.
+        On success sets a `session_token` HTTP-only cookie valid for 30 days
+        and returns a redirect URL.
+      operationId: localLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            example:
+              username: admin
+              password: s3cr3t
+      responses:
+        "200":
+          description: Login successful
+          headers:
+            Set-Cookie:
+              description: session_token cookie (HttpOnly, SameSite=Lax, Max-Age=2592000)
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/github:
+    get:
+      tags: [Auth]
+      summary: Start GitHub OAuth flow
+      description: |
+        Redirects the browser to GitHub's authorization page. Requires GitHub
+        OAuth to be configured on the server (`GITHUB_CLIENT_ID` etc.).
+      operationId: githubOAuthStart
+      responses:
+        "302":
+          description: Redirect to GitHub or back to /auth/login with an error query param if OAuth is not configured
+
+  /auth/github/callback:
+    get:
+      tags: [Auth]
+      summary: GitHub OAuth callback
+      description: |
+        Handles the callback from GitHub after the user authorizes the app.
+        Upserts the GitHub user in the database, creates a session, and
+        redirects to `/admin` (admins) or `/my/packages` (regular users).
+      operationId: githubOAuthCallback
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: error
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect to dashboard on success, /auth/login on failure
+          headers:
+            Set-Cookie:
+              description: session_token cookie
+              schema:
+                type: string
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout (POST)
+      description: Clears the session cookie and redirects to the login page.
+      operationId: logout
+      responses:
+        "302":
+          description: Redirect to /auth/login
+          headers:
+            Set-Cookie:
+              description: Clears session_token (Max-Age=0)
+              schema:
+                type: string
+
+  /logout:
+    get:
+      tags: [Auth]
+      summary: Logout (GET)
+      description: Clears the session cookie and redirects to the public home page.
+      operationId: logoutGet
+      responses:
+        "302":
+          description: Redirect to /
+          headers:
+            Set-Cookie:
+              description: Clears session_token (Max-Age=0)
+              schema:
+                type: string
+
+# ---------------------------------------------------------------------------
+# Components
+# ---------------------------------------------------------------------------
+
+components:
+  # ── Security Schemes ──────────────────────────────────────────────────────
+
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session_token
+      description: JWT session cookie set after login
+    bearerToken:
+      type: http
+      scheme: bearer
+      description: API key created via POST /api/v1/user/keys
+
+  # ── Reusable Parameters ───────────────────────────────────────────────────
+
+  parameters:
+    PackageName:
+      name: name
+      in: path
+      required: true
+      description: Package name (lowercase, hyphen-separated)
+      schema:
+        type: string
+      example: cxy-json
+
+    VersionString:
+      name: version
+      in: path
+      required: true
+      description: Semver version string
+      schema:
+        type: string
+      example: 1.0.0
+
+    UserId:
+      name: id
+      in: path
+      required: true
+      description: User ID
+      schema:
+        type: integer
+        format: int64
+
+  # ── Reusable Responses ────────────────────────────────────────────────────
+
+  responses:
+    BadRequest:
+      description: Bad request — missing or invalid parameters
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: BAD_REQUEST
+              message: "Missing required field: metadata.name"
+
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: UNAUTHORIZED
+              message: "Authentication required"
+
+    Forbidden:
+      description: Insufficient privileges
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: FORBIDDEN
+              message: "Admin access required"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: NOT_FOUND
+              message: "Package not found: cxy-json"
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: INTERNAL_ERROR
+              message: "Database error"
+
+  # ── Schemas ───────────────────────────────────────────────────────────────
+
+  schemas:
+    # ── Responses ────────────────────────────────────────────────────────
+
+    ApiLoginResponse:
+      type: object
+      description: User profile returned after successful API key validation
+      properties:
+        id:
+          type: integer
+          format: int64
+        login:
+          type: string
+          example: dccarter
+        name:
+          type: string
+          nullable: true
+          example: "DC Carter"
+        email:
+          type: string
+          nullable: true
+          example: "dc@example.com"
+        avatar_url:
+          type: string
+          nullable: true
+          example: "https://avatars.githubusercontent.com/u/2494852?v=4"
+        is_admin:
+          type: boolean
+          example: false
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        version:
+          type: string
+          example: "1.0.0"
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Version yanked successfully
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              enum:
+                [
+                  BAD_REQUEST,
+                  UNAUTHORIZED,
+                  FORBIDDEN,
+                  NOT_FOUND,
+                  INTERNAL_ERROR,
+                ]
+            message:
+              type: string
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+
+    LoginResponse:
+      type: object
+      properties:
+        redirect:
+          type: string
+          description: URL to redirect to after login
+          example: /admin
+
+    PublishRequest:
+      type: object
+      required: [repository, tag, commit, checksum, metadata, dependencies]
+      properties:
+        repository:
+          type: string
+          description: Git repository URL
+          example: https://github.com/example/my-pkg
+        tag:
+          type: string
+          description: Git tag
+          example: v1.0.0
+        commit:
+          type: string
+          description: Full git commit SHA
+          example: abc123def456abc123def456abc123def456abc123
+        checksum:
+          type: string
+          description: Source tree checksum (format sha256:<hex>)
+          example: "sha256:4b5e6f7a8b9c0d1e2f3a4b5e6f7a8b9c0d1e2f3a"
+        metadata:
+          $ref: "#/components/schemas/PackageMetadata"
+        readme:
+          type: string
+          description: Raw markdown content of README.md (optional)
+        dependencies:
+          type: array
+          items:
+            $ref: "#/components/schemas/DependencySpec"
+
+    PublishResponse:
+      type: object
+      properties:
+        name:
+          type: string
+          example: my-pkg
+        version:
+          type: string
+          example: 1.0.0
+        url:
+          type: string
+          example: https://registry.cxy-lang.org/packages/my-pkg
+
+    PackageMetadata:
+      type: object
+      required: [name, version, description, author, license, repository]
+      properties:
+        name:
+          type: string
+          example: my-pkg
+        version:
+          type: string
+          example: 1.0.0
+        description:
+          type: string
+          example: An example package
+        author:
+          type: string
+          example: dccarter
+        license:
+          type: string
+          example: MIT
+        repository:
+          type: string
+          example: https://github.com/example/my-pkg
+        homepage:
+          type: string
+          example: https://example.com
+
+    DependencySpec:
+      type: object
+      required: [name, version_constraint]
+      properties:
+        name:
+          type: string
+          example: cxy-json
+        repository:
+          type: string
+          example: https://github.com/cxy-lang/cxy-json
+        version_constraint:
+          type: string
+          example: "^1.0.0"
+        is_dev:
+          type: boolean
+          default: false
+
+    Package:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        owner_user_id:
+          type: integer
+          format: int64
+          description: User ID of the publisher (0 = anonymous/legacy)
+        name:
+          type: string
+          example: cxy-json
+        description:
+          type: string
+        author:
+          type: string
+        license:
+          type: string
+        repository:
+          type: string
+        homepage:
+          type: string
+        readme:
+          type: string
+          description: "Always omitted from API responses. Fetch separately via GET /api/v1/packages/{name}/readme"
+          nullable: true
+        total_downloads:
+          type: integer
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PackageSummary:
+      type: object
+      properties:
+        name:
+          type: string
+          example: cxy-json
+        description:
+          type: string
+          example: A fast JSON parser for Cxy
+        author:
+          type: string
+          example: dccarter
+        license:
+          type: string
+          example: MIT
+        repository:
+          type: string
+        latest_version:
+          type: string
+          example: 1.0.0
+        total_downloads:
+          type: integer
+          format: int64
+        updated_at:
+          type: string
+          format: date-time
+        owner_user_id:
+          type: integer
+          format: int64
+
+    PackageSearchResult:
+      type: object
+      properties:
+        total:
+          type: integer
+          format: int64
+          description: Total number of matching packages (ignoring limit/offset)
+        packages:
+          type: array
+          items:
+            $ref: "#/components/schemas/PackageSummary"
+
+    PackageDetails:
+      type: object
+      properties:
+        pkg:
+          $ref: "#/components/schemas/Package"
+        latest:
+          $ref: "#/components/schemas/Version"
+        dependencies:
+          type: array
+          items:
+            $ref: "#/components/schemas/Dependency"
+        versions:
+          type: array
+          items:
+            $ref: "#/components/schemas/VersionSummary"
+
+    Version:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        package_id:
+          type: integer
+          format: int64
+        version:
+          type: string
+          example: 1.0.0
+        tag:
+          type: string
+          example: v1.0.0
+        commit:
+          type: string
+          example: abc123def456abc123def456abc123def456abc123
+        checksum:
+          type: string
+          example: "sha256:4b5e6f7a8b9c0d1e2f3a4b5e6f7a8b9c0d1e2f3a"
+        yanked:
+          type: boolean
+          default: false
+        downloads:
+          type: integer
+          format: int64
+        published_at:
+          type: string
+          format: date-time
+
+    VersionSummary:
+      type: object
+      properties:
+        version:
+          type: string
+          example: 1.0.0
+        tag:
+          type: string
+          example: v1.0.0
+        commit:
+          type: string
+        published_at:
+          type: string
+          format: date-time
+        downloads:
+          type: integer
+          format: int64
+        yanked:
+          type: boolean
+
+    VersionsResponse:
+      type: object
+      properties:
+        name:
+          type: string
+          example: cxy-json
+        versions:
+          type: array
+          items:
+            $ref: "#/components/schemas/VersionSummary"
+
+    Dependency:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        version_id:
+          type: integer
+          format: int64
+        name:
+          type: string
+          example: cxy-json
+        repository:
+          type: string
+        version_constraint:
+          type: string
+          example: "^1.0.0"
+        is_dev:
+          type: boolean
+
+    ApiKey:
+      type: object
+      description: API key metadata (the plain-text key is never returned after creation)
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+          example: CI publish key
+        scopes:
+          type: array
+          items:
+            type: string
+            enum: [publish, admin]
+          example: [publish]
+        created_at:
+          type: string
+          format: date-time
+        last_used:
+          type: string
+          format: date-time
+          nullable: true
+          description: null if never used
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: null if the key never expires
+
+    CreateApiKeyRequest:
+      type: object
+      required: [name, scopes]
+      properties:
+        name:
+          type: string
+          description: Human-friendly label for the key
+          example: CI publish key
+        scopes:
+          type: array
+          description: |
+            List of permission scopes. Available scopes:
+            - `publish` — publish new package versions
+            - `admin` — admin operations (requires caller to be an admin)
+          items:
+            type: string
+            enum: [publish, admin]
+          example: [publish]
+        expires_at:
+          type: string
+          format: date
+          nullable: true
+          description: Expiry date in YYYY-MM-DD format. Omit for a non-expiring key.
+          example: "2026-01-01"
+
+    CreateApiKeyResponse:
+      type: object
+      properties:
+        key:
+          type: string
+          description: Plain-text API key. Shown ONCE — store it immediately.
+          example: cxy_live_riDbb3u0jplv26N1vruXDPhxo0mCmHg8
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true

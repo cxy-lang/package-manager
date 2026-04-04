@@ -52,6 +52,17 @@ pub func packages(ep: &Endpoint): void {
         handleGetPackage(resp, ctx.repo, __copy!(*nameOpt))
     }))
 
+    // Get package README (raw markdown)
+    auth.exempt(ep("GET /api/v1/packages/{name}/readme", (req: &const Request, resp: &Response) => {
+        var ctx = ep.context[RepoProvider](req)
+        var nameOpt = req.param("name")
+        if !nameOpt {
+            response.badRequest(resp, "Missing package name".S)
+            return
+        }
+        handleGetReadme(resp, ctx.repo, __copy!(*nameOpt))
+    }))
+
     // List versions
     auth.exempt(ep("GET /api/v1/packages/{name}/versions", (req: &const Request, resp: &Response) => {
         var ctx = ep.context[RepoProvider](req)
@@ -93,6 +104,90 @@ pub func packages(ep: &Endpoint): void {
         }
 
         handleDownload(resp, ctx.repo, __copy!(*nameOpt), __copy!(*versionOpt))
+    }))
+
+    // Yank version (owner or admin)
+    auth.requireUser(ep("POST /api/v1/packages/{name}/{version}/yank", (req: &const Request, resp: &Response) => {
+        var ctx = ep.context[RepoProvider](req)
+        var authCtx = ep.context[AuthMiddleware](req)
+        var user = *authCtx.currentUser
+
+        var nameOpt = req.param("name")
+        var versionOpt = req.param("version")
+
+        if !nameOpt || !versionOpt {
+            response.badRequest(resp, "Missing package name or version".S)
+            return
+        }
+
+        var name = *nameOpt
+        var version = *versionOpt
+
+        // Check ownership or admin
+        var pkgOpt = ctx.repo.getPackageSummary(__copy!(name)) catch {
+            response.internalError(resp, f"Failed to fetch package: {ex!.what()}")
+            return
+        }
+
+        if !pkgOpt {
+            response.notFound(resp, f"Package not found: {name}")
+            return
+        }
+
+        var pkg = *pkgOpt
+        if pkg.owner_user_id != user.id && !user.is_admin {
+            response.forbidden(resp, "Only the package owner or an admin can yank versions".S)
+            return
+        }
+
+        ctx.repo.yankVersion(__copy!(name), __copy!(version)) catch {
+            response.internalError(resp, f"Failed to yank version: {ex!.what()}")
+            return
+        }
+
+        response.jsonResponse(resp, &MessageResponse("Version yanked successfully".S))
+    }))
+
+    // Unyank version (owner or admin)
+    auth.requireUser(ep("POST /api/v1/packages/{name}/{version}/unyank", (req: &const Request, resp: &Response) => {
+        var ctx = ep.context[RepoProvider](req)
+        var authCtx = ep.context[AuthMiddleware](req)
+        var user = *authCtx.currentUser
+
+        var nameOpt = req.param("name")
+        var versionOpt = req.param("version")
+
+        if !nameOpt || !versionOpt {
+            response.badRequest(resp, "Missing package name or version".S)
+            return
+        }
+
+        var name = *nameOpt
+        var version = *versionOpt
+
+        // Check ownership or admin
+        var pkgOpt = ctx.repo.getPackageSummary(__copy!(name)) catch {
+            response.internalError(resp, f"Failed to fetch package: {ex!.what()}")
+            return
+        }
+
+        if !pkgOpt {
+            response.notFound(resp, f"Package not found: {name}")
+            return
+        }
+
+        var pkg = *pkgOpt
+        if pkg.owner_user_id != user.id && !user.is_admin {
+            response.forbidden(resp, "Only the package owner or an admin can unyank versions".S)
+            return
+        }
+
+        ctx.repo.unyankVersion(__copy!(name), __copy!(version)) catch {
+            response.internalError(resp, f"Failed to unyank version: {ex!.what()}")
+            return
+        }
+
+        response.jsonResponse(resp, &MessageResponse("Version unyanked successfully".S))
     }))
 
     // Publish package (requires any authenticated user or admin via API key)
@@ -191,58 +286,6 @@ pub func userKeys(ep: &Endpoint): void {
 pub func admin(ep: &Endpoint): void {
     var auth = ep.middleware[AuthMiddleware]()
 
-    // Yank version
-    auth.requireAdmin(ep("POST /api/v1/admin/packages/{name}/{version}/yank", (req: &const Request, resp: &Response) => {
-        var ctx = ep.context[RepoProvider](req)
-        var repo = ctx.repo
-
-        var nameOpt = req.param("name")
-        var versionOpt = req.param("version")
-
-        if !nameOpt || !versionOpt {
-            response.badRequest(resp, "Missing package name or version".S)
-            return
-        }
-
-        var name = *nameOpt
-        var version = *versionOpt
-
-        repo.yankVersion(__copy!(name), __copy!(version)) catch {
-            response.internalError(resp, f"Failed to yank version: {ex!.what()}")
-            return
-        }
-
-        resp.header("Content-Type", "application/json; charset=utf-8")
-        resp.body() << "{\"message\":\"Version yanked successfully\"}"
-        resp.end(Status.Ok)
-    }))
-
-    // Unyank version
-    auth.requireAdmin(ep("POST /api/v1/admin/packages/{name}/{version}/unyank", (req: &const Request, resp: &Response) => {
-        var ctx = ep.context[RepoProvider](req)
-        var repo = ctx.repo
-
-        var nameOpt = req.param("name")
-        var versionOpt = req.param("version")
-
-        if !nameOpt || !versionOpt {
-            response.badRequest(resp, "Missing package name or version".S)
-            return
-        }
-
-        var name = *nameOpt
-        var version = *versionOpt
-
-        repo.unyankVersion(__copy!(name), __copy!(version)) catch {
-            response.internalError(resp, f"Failed to unyank version: {ex!.what()}")
-            return
-        }
-
-        resp.header("Content-Type", "application/json; charset=utf-8")
-        resp.body() << "{\"message\":\"Version unyanked successfully\"}"
-        resp.end(Status.Ok)
-    }))
-
     // Make user admin
     auth.requireAdmin(ep("POST /api/v1/admin/users/{id}/make-admin", (req: &const Request, resp: &Response) => {
         var ctx = ep.context[RepoProvider](req)
@@ -259,6 +302,15 @@ pub func admin(ep: &Endpoint): void {
 
         if userId == currentUser.id {
             response.badRequest(resp, "Cannot grant admin to yourself".S)
+            return
+        }
+
+        var userOpt = ctx.repo.getUser(userId) catch {
+            response.internalError(resp, f"Failed to fetch user: {ex!.what()}")
+            return
+        }
+        if !userOpt {
+            response.notFound(resp, f"User not found: {userId}")
             return
         }
 
@@ -288,6 +340,15 @@ pub func admin(ep: &Endpoint): void {
 
         if userId == currentUser.id {
             response.badRequest(resp, "Cannot revoke your own admin".S)
+            return
+        }
+
+        var userOpt = ctx.repo.getUser(userId) catch {
+            response.internalError(resp, f"Failed to fetch user: {ex!.what()}")
+            return
+        }
+        if !userOpt {
+            response.notFound(resp, f"User not found: {userId}")
             return
         }
 
@@ -348,7 +409,34 @@ func handleGetPackage(resp: &Response, repo: &PackageRepository, name: __string)
         return
     }
 
-    response.jsonResponse(resp, pkgOpt.ref())
+    // Strip readme from API response — fetch it separately via /readme
+    var details = *pkgOpt
+    details.pkg.readme = null
+
+    response.jsonResponse(resp, &details)
+}
+
+/// Get package README as raw markdown
+func handleGetReadme(resp: &Response, repo: &PackageRepository, name: __string): void {
+    var pkgOpt = repo.getPackage(name) catch {
+        response.internalError(resp, f"Database error: {ex!.what()}")
+        return
+    }
+
+    if !pkgOpt {
+        response.notFound(resp, f"Package not found: {name}")
+        return
+    }
+
+    var details = *pkgOpt
+    if details.pkg.readme == null || details.pkg.readme.empty() {
+        resp.end(Status.NoContent)
+        return
+    }
+
+    resp.header("Content-Type", "text/markdown; charset=utf-8")
+    resp.body() << details.pkg.readme
+    resp.end(Status.Ok)
 }
 
 /// List versions handler
@@ -419,6 +507,15 @@ func handlePublishPackage(resp: &Response, repo: &PackageRepository, registryUrl
 // ============================================================================
 // Response Models
 // ============================================================================
+
+@json
+pub struct MessageResponse {
+    message: String = null
+
+    func `init`(message: String) {
+        this.message = &&message
+    }
+}
 
 @json
 pub struct HealthResponse {

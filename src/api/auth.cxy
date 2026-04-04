@@ -4,12 +4,31 @@ import { Server, Request, Response, Status } from "stdlib/http.cxy"
 import { HashMap } from "stdlib/hash.cxy"
 import { parse } from "stdlib/json.cxy"
 import "./response.cxy" as response
-
 import { OAuthClient, GitHub, getGitHubUser } from "@oauth"
 import { PackageRepository } from "../repository.cxy"
 import { User } from "../models.cxy"
 import { RepoProvider, AuthMiddleware } from "./middleware.cxy"
 import { LoginPage } from "../admin/pages/login.cxy"
+
+/// JSON response for GET /api/v1/login (API key validation)
+@json
+struct ApiLoginResponse {
+    id: i64 = 0
+    login: String = null
+    name: String? = null
+    email: String? = null
+    avatar_url: String? = null
+    is_admin: bool = false
+
+    func `init`(user: &User) {
+        this.id = user.id
+        this.login = __copy!(user.login)
+        this.name = user.name
+        this.email = user.email
+        this.avatar_url = user.avatar_url
+        this.is_admin = user.is_admin
+    }
+}
 
 /// Type alias for server with middleware
 pub type AuthEndpoint = Server[RepoProvider, AuthMiddleware]
@@ -49,6 +68,14 @@ pub func isOAuthConfigured(): bool {
 /// Register all authentication routes
 pub func registerAuthRoutes(ep: &AuthEndpoint): void {
     var auth = ep.middleware[AuthMiddleware]()
+
+    // GET /api/v1/login - Validate API key and return associated user
+    auth.requireUser(ep("GET /api/v1/login", (req: &const Request, resp: &Response) => {
+        var authCtx = ep.context[AuthMiddleware](req)
+        var user = *authCtx.currentUser
+        var loginResp = ApiLoginResponse(&user)
+        response.jsonResponse(resp, &loginResp)
+    }))
 
     // GET /auth/login - Display login page
     auth.exempt(ep("GET /auth/login", (@unused req: &const Request, resp: &Response) => {

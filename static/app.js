@@ -57,7 +57,7 @@ async function yankVersion(packageName, version) {
   }
   try {
     const resp = await apiPost(
-      `/api/v1/admin/packages/${packageName}/${version}/yank`,
+      `/api/v1/packages/${packageName}/${version}/yank`,
       {},
     );
     if (resp.ok) {
@@ -74,7 +74,7 @@ async function unyankVersion(packageName, version) {
   if (!confirm(`Unyank ${packageName} v${version}?`)) return;
   try {
     const resp = await apiPost(
-      `/api/v1/admin/packages/${packageName}/${version}/unyank`,
+      `/api/v1/packages/${packageName}/${version}/unyank`,
       {},
     );
     if (resp.ok) {

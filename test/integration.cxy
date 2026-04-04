@@ -6,16 +6,33 @@ import test { parse } from "stdlib/json.cxy"
 import test { getenv } from "stdlib/os.cxy"
 
 test {
-    var adminToken: __string;
-
     func createSession() {
         const BASE_URL = getenv("BASE_URL", "http://localhost:8080") catch "".s
         var session = Session.create(BASE_URL)
         session.userAgent("Cxy/0.0.1")
-        adminToken = getenv("ADMIN_TOKEN", "") catch "INVALD".s
         return &&session
     }
+
     var session = createSession()
+    var adminSession = createAdminSession()
+
+    func createAdminSession() {
+        const ADMIN_PASSWORD = getenv("ADMIN_PASSWORD", "test-admin-password") catch "test-admin-password".s
+        var s = createSession()
+        var resp = s.perform(Method.Post, "/auth/login", (req: &Request): !void => {
+            req.header("Content-Type", "application/json")
+            req.body() << "{\"username\":\"admin\",\"password\":\""
+            req.body() << ADMIN_PASSWORD
+            req.body() << "\"}"
+        }) catch { return &&s }
+        // Transfer Set-Cookie from login response to session headers
+        var cookie = resp.header("Set-Cookie")
+        if !!cookie {
+            println("Cookie ", cookie)
+            s.header("Cookie", __copy!(*cookie))
+        }
+        return &&s
+    }
 
     func get(path: __string): !Response {
         return session.perform(Method.Get, path)
@@ -28,12 +45,19 @@ test {
         })
     }
 
-    func postWithAuth(path: __string, body: string, token: __string): !Response {
-        return session.perform(Method.Post, path, (req: &Request): !void => {
+    func postWithAuth(path: __string, body: string): !Response {
+        return adminSession.perform(Method.Post, path, (req: &Request): !void => {
             req.header("Content-Type", "application/json")
-            req.header("Authorization", f"Bearer {token}")
             req.body() << body
         })
+    }
+
+    func getWithAuth(path: __string): !Response {
+        return adminSession.perform(Method.Get, path)
+    }
+
+    func deleteWithAuth(path: __string): !Response {
+        return adminSession.perform(Method.Delete, path)
     }
 
     func assertOk(resp: &Response): !void {
@@ -138,6 +162,15 @@ test "Version - get specific version for non-existent package" {
 }
 
 // ============================================================================
+// Readme Tests
+// ============================================================================
+
+test "Readme - get for non-existent package returns 404" {
+    var resp = get("/api/v1/packages/non-existent-package/readme")
+    assertStatus(&resp, <u16>Status.NotFound)
+}
+
+// ============================================================================
 // Download Tracking Tests
 // ============================================================================
 
@@ -179,40 +212,124 @@ test "Publish - requires authentication" {
 }
 
 test "Publish - rejects invalid JSON" {
-    var resp = postWithAuth("/api/v1/packages", "invalid json", adminToken)
+    var resp = postWithAuth("/api/v1/packages", "invalid json")
     assertStatus(&resp, <u16>Status.BadRequest)
     assertContains(resp.body().__str(), "Invalid JSON")
 }
 
 test "Publish - rejects missing fields" {
     var body = """{"metadata": {}}"""
-    var resp = postWithAuth("/api/v1/packages", body, adminToken)
+    var resp = postWithAuth("/api/v1/packages", body)
     // Should fail validation
     ok!(resp.statusCode() != Status.Create)
 }
 
 // ============================================================================
-// Admin Token Tests (Requires Auth)
+// Yank / Unyank Tests
 // ============================================================================
 
-test "Admin - create token requires authentication" {
-    var body = """{"subject":"test@example.com","scope":"publish","expiresInDays":365}"""
-
-    var resp = post("/api/v1/admin/tokens", body)
+test "Yank - requires authentication" {
+    var resp = post("/api/v1/packages/fake-pkg/1.0.0/yank", "")
     assertStatus(&resp, <u16>Status.Unauthorized)
 }
 
-test "Admin - rejects invalid scope" {
-    var body = """{"subject":"test@example.com","scope":"invalid","expiresInDays":365}"""
-
-    var resp = postWithAuth("/api/v1/admin/tokens", body, adminToken)
-    assertStatus(&resp, <u16>Status.BadRequest)
-    assertContains(resp.body().__str(), "Invalid scope")
+test "Unyank - requires authentication" {
+    var resp = post("/api/v1/packages/fake-pkg/1.0.0/unyank", "")
+    assertStatus(&resp, <u16>Status.Unauthorized)
 }
 
-test "Admin - rejects invalid JSON" {
-    var resp = postWithAuth("/api/v1/admin/tokens", "{bad json", adminToken)
+test "Yank - returns 404 for non-existent package" {
+    var resp = postWithAuth("/api/v1/packages/non-existent-pkg/1.0.0/yank", "")
+    assertStatus(&resp, <u16>Status.NotFound)
+}
+
+test "Unyank - returns 404 for non-existent package" {
+    var resp = postWithAuth("/api/v1/packages/non-existent-pkg/1.0.0/unyank", "")
+    assertStatus(&resp, <u16>Status.NotFound)
+}
+
+// ============================================================================
+// Admin User Management Tests (Requires Auth)
+// ============================================================================
+
+test "Admin - make-admin requires authentication" {
+    var resp = post("/api/v1/admin/users/1/make-admin", "")
+    assertStatus(&resp, <u16>Status.Unauthorized)
+}
+
+test "Admin - revoke-admin requires authentication" {
+    var resp = post("/api/v1/admin/users/1/revoke-admin", "")
+    assertStatus(&resp, <u16>Status.Unauthorized)
+}
+
+test "Admin - cannot grant admin to self" {
+    // Get current admin user id first
+    var me = getWithAuth("/api/v1/login")
+    assertOk(&me)
+    var body = me.body().__str()
+    // Extract id — just confirm we get a 400 when targeting ourselves
+    assertContains(body, "\"id\"")
+
+    // The bootstrap admin always gets id=1
+    var resp = postWithAuth("/api/v1/admin/users/1/make-admin", "")
     assertStatus(&resp, <u16>Status.BadRequest)
+}
+
+test "Admin - make-admin returns 404 for non-existent user" {
+    var resp = postWithAuth("/api/v1/admin/users/99999/make-admin", "")
+    assertStatus(&resp, <u16>Status.NotFound)
+}
+
+test "Admin - revoke-admin returns 404 for non-existent user" {
+    var resp = postWithAuth("/api/v1/admin/users/99999/revoke-admin", "")
+    assertStatus(&resp, <u16>Status.NotFound)
+}
+
+// ============================================================================
+// User API Key Tests (Requires Auth)
+// ============================================================================
+
+test "User keys - list requires authentication" {
+    var resp = get("/api/v1/user/keys")
+    assertStatus(&resp, <u16>Status.Unauthorized)
+}
+
+test "User keys - create requires authentication" {
+    var body = """{"name":"my-key","scopes":["publish"]}"""
+    var resp = post("/api/v1/user/keys", body)
+    assertStatus(&resp, <u16>Status.Unauthorized)
+}
+
+test "User keys - revoke requires authentication" {
+    var resp = session.perform(Method.Delete, "/api/v1/user/keys/1")
+    assertStatus(&resp, <u16>Status.Unauthorized)
+}
+
+test "User keys - create rejects invalid JSON" {
+    var resp = postWithAuth("/api/v1/user/keys", "{bad json")
+    assertStatus(&resp, <u16>Status.BadRequest)
+}
+
+test "User keys - create requires name field" {
+    var body = """{"scopes":["publish"]}"""
+    var resp = postWithAuth("/api/v1/user/keys", body)
+    assertStatus(&resp, <u16>Status.BadRequest)
+    assertContains(resp.body().__str(), "name")
+}
+
+test "User keys - full lifecycle" {
+    // Create a key
+    var body = """{"name":"integration-test-key","scopes":["publish"]}"""
+    var createResp = postWithAuth("/api/v1/user/keys", body)
+    assertStatus(&createResp, <u16>Status.Create)
+    var createBody = createResp.body().__str()
+    assertContains(createBody, "key")
+    assertContains(createBody, "integration-test-key")
+
+    // List keys — should contain the new one
+    var listResp = getWithAuth("/api/v1/user/keys")
+    assertOk(&listResp)
+    assertContains(listResp.body().__str(), "integration-test-key")
 }
 
 // ============================================================================

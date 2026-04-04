@@ -53,7 +53,7 @@ pub struct ApiKey {
             return false
         }
         for s, _ in scopes {
-            if s == scope {
+            if s == &scope {
                 return true
             }
         }

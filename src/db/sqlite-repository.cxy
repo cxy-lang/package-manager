@@ -550,17 +550,19 @@ pub class SQLitePackageRepository: PackageRepository {
         var versionId = versionIdStmt.column[i64](0)
 
         // Insert dependencies
-        for dep, _ in req.dependencies {
-            _db.exec("""
-                INSERT INTO dependencies (version_id, name, repository, version_constraint, is_dev)
-                VALUES (?, ?, ?, ?, ?)
-            """,
-                versionId,
-                dep.name.__str(),
-                dep.repository.__str(),
-                dep.version_constraint.__str(),
-                <i64>(dep.is_dev ? 1 : 0)
-            )
+        if req.dependencies != null {
+            for dep, _ in req.dependencies {
+                _db.exec("""
+                    INSERT INTO dependencies (version_id, name, repository, version_constraint, is_dev)
+                    VALUES (?, ?, ?, ?, ?)
+                """,
+                    versionId,
+                    dep.name.__str(),
+                    dep.repository.__str(),
+                    dep.version_constraint.__str(),
+                    <i64>(dep.is_dev ? 1 : 0)
+                )
+            }
         }
 
         return packageId

@@ -90,6 +90,7 @@ struct RouteAuthConfig {
     isExempt: bool = false
     requireUser: bool = false    // Requires any logged-in user
     requireAdmin: bool = false   // Requires admin user
+    isApiRoute: bool = false     // Returns 401 instead of redirecting
 }
 
 /// Context for authentication middleware
@@ -146,7 +147,8 @@ pub class AuthMiddleware {
     /// Mark a route as requiring logged-in user (session or API key)
     @inline
     func requireUser(route: &Route): &Route {
-        _routes.insert(route.id(), RouteAuthConfig{requireUser: true})
+        var isApi = route.prefix.startswith("/api/")
+        _routes.insert(route.id(), RouteAuthConfig{requireUser: true, isApiRoute: isApi})
         route.setAttrs({parseCookies: true})
         return route
     }
@@ -154,7 +156,8 @@ pub class AuthMiddleware {
     /// Mark a route as requiring admin user (session or API key)
     @inline
     func requireAdmin(route: &Route): &Route {
-        _routes.insert(route.id(), RouteAuthConfig{requireAdmin: true})
+        var isApi = route.prefix.startswith("/api/")
+        _routes.insert(route.id(), RouteAuthConfig{requireAdmin: true, isApiRoute: isApi})
         route.setAttrs({parseCookies: true})
         return route
     }
@@ -182,8 +185,8 @@ pub class AuthMiddleware {
         if !!sessionToken && !sessionToken&.empty() {
             var user = this.loadUserFromSession(__copy!(*sessionToken), repoCtx.repo)
             if !!user {
-                ctx.currentUser = *user
                 ctx.isAdmin = user&.is_admin
+                ctx.currentUser = user.move()
             }
         }
 
@@ -203,7 +206,7 @@ pub class AuthMiddleware {
         if config&.requireAdmin {
             if !ctx.isAdmin {
                 // Not logged in or not admin
-                if req.header("Authorization".S) {
+                if config&.isApiRoute || !!req.header("Authorization".S) {
                     // API request - return 401
                     unauthorized(resp, "Admin access required".S)
                 } else {
@@ -216,7 +219,7 @@ pub class AuthMiddleware {
         else if config&.requireUser {
             if !ctx.currentUser {
                 // Not logged in
-                if req.header("Authorization".S) {
+                if config&.isApiRoute || !!req.header("Authorization".S) {
                     // API request - return 401
                     unauthorized(resp, "Authentication required".S)
                 } else {
