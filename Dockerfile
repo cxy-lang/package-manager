@@ -23,7 +23,7 @@ ENV RELEASE_TAG=${RELEASE_TAG}
 LABEL version="${RELEASE_TAG}"
 
 # Install runtime dependencies
-RUN apk add --no-cache openssl sqlite-libs
+RUN apk add --no-cache openssl sqlite-libs ca-certificates
 
 # Copy the release artifacts
 COPY --from=builder /cxy/.cxy/build/release /package-manager
