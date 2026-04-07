@@ -223,6 +223,10 @@
     gap: 2rem;
 }
 
+.registry-home-grid > * {
+    min-width: 0;
+}
+
 .registry-section-header {
     font-size: 1rem;
     font-weight: 700;
@@ -252,6 +256,7 @@
 }
 
 .registry-package-card {
+    min-width: 0;
     display: block;
     padding: 1rem;
     border: 1px solid var(--surface-border);
@@ -276,6 +281,10 @@
 }
 
 .registry-package-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
     font-weight: 700;
     font-size: 1rem;
     color: var(--primary-500);
@@ -293,6 +302,9 @@
 }
 
 .registry-package-desc {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    word-break: break-word;
     font-size: 0.875rem;
     color: var(--text-muted);
     margin: 0 0 0.5rem;
@@ -505,6 +517,8 @@
     border: 1px solid var(--surface-border);
     border-radius: var(--radius-lg);
     padding: 2rem;
+    min-width: 0;
+    overflow: hidden;
 }
 
 /* ============================================================
@@ -785,6 +799,8 @@
     border-collapse: collapse;
     width: 100%;
     margin: 1em 0;
+    display: block;
+    overflow-x: auto;
 }
 
 .mk-th {

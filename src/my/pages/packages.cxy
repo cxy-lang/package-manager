@@ -36,6 +36,7 @@ pub class MyPackagesPage: View {
                     <div class="card-header">
                         <span>{{ _result.total }}&#32;{{ __string(_result.total == 1 ? "package" : "packages") }}</span>
                     </div>
+                    <div class="table-wrapper">
                     <table class="data-table">
                         <thead>
                             <tr>
@@ -73,6 +74,7 @@ pub class MyPackagesPage: View {
                             {{ /for }}
                         </tbody>
                     </table>
+                    </div>
                 </div>
                 {{ /if }}
             </div>
