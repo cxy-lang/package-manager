@@ -46,11 +46,17 @@ func main(args: [string]): !void {
     var server = Endpoint(Config{address: Address("0.0.0.0", config.port)})
 
     // Serve static files with caching and ETag support
-    @unused var fs = FileServer(&server, FsConfig{
+    var fs = FileServer(&server, FsConfig{
         enableSendFile: true,
         root: String(config.staticDir),
         route: "/static".S
     })
+
+    // Override per-MIME cacheExpires so Cache-Control is emitted and ETags
+    // are validated on every request (max-age=1 expires immediately, forcing
+    // the browser to revalidate with If-None-Match → 304 if unchanged)
+    fs.updateMime(".css", {cacheExpires: 1`i64})
+    fs.updateMime(".js",  {cacheExpires: 1`i64})
 
     // Configure middleware
     server.middleware[RepoProvider]().configure(config)

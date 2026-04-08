@@ -511,6 +511,10 @@
     align-items: start;
 }
 
+.registry-package-main {
+    min-width: 0;
+}
+
 /* README */
 .registry-readme {
     background: var(--surface-bg);
@@ -518,7 +522,6 @@
     border-radius: var(--radius-lg);
     padding: 2rem;
     min-width: 0;
-    overflow: hidden;
 }
 
 /* ============================================================
@@ -690,6 +693,8 @@
 .mk-doc {
     line-height: 1.7;
     color: var(--text-primary);
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
 
 .mk-h1,
@@ -752,6 +757,7 @@
     padding: 1.25rem;
     overflow-x: auto;
     margin: 1em 0;
+    max-width: 100%;
 }
 
 .mk-pre .mk-code {
