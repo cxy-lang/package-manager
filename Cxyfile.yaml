@@ -12,15 +12,12 @@ dependencies:
   - name: cxyml
     repository: https://github.com/cxy-lang/cxyml.git
     version: "*"
-    tag: v0.1.0
   - name: oauth
     repository: https://github.com/cxy-lang/oauth.git
     version: "*"
-    tag: v0.1.0
   - name: markdown
     repository: https://github.com/cxy-lang/markdown.git
     version: "*"
-    tag: v0.1.1
 
 tests:
   - file: "src/**/*.cxy"

@@ -3,7 +3,7 @@ module package_manager_db_schema
 /// SQL schema for the package registry database.
 /// Designed to be forward-compatible with PostgreSQL (no SQLite-specific syntax in core schema).
 
-pub const CREATE_PACKAGES_TABLE = """
+#const CREATE_PACKAGES_TABLE = """
 CREATE TABLE IF NOT EXISTS packages (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     name             TEXT    NOT NULL UNIQUE,
@@ -22,43 +22,43 @@ CREATE TABLE IF NOT EXISTS packages (
 
 /// Migration: add owner_user_id to packages table (for existing databases).
 /// Safe to run on a new database — the column will already exist from CREATE_PACKAGES_TABLE.
-pub const MIGRATE_ADD_OWNER_USER_ID = """
+#const MIGRATE_ADD_OWNER_USER_ID = """
 ALTER TABLE packages ADD COLUMN owner_user_id INTEGER NOT NULL DEFAULT 0
 """
 
-pub const CREATE_PACKAGES_NAME_INDEX = """
+#const CREATE_PACKAGES_NAME_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_packages_name ON packages (name)
 """
 
-pub const CREATE_PACKAGES_UPDATED_INDEX = """
+#const CREATE_PACKAGES_UPDATED_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_packages_updated ON packages (updated_at DESC)
 """
 
-pub const CREATE_PACKAGES_DOWNLOADS_INDEX = """
+#const CREATE_PACKAGES_DOWNLOADS_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_packages_downloads ON packages (total_downloads DESC)
 """
 
-pub const CREATE_PACKAGES_OWNER_INDEX = """
+#const CREATE_PACKAGES_OWNER_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_packages_owner ON packages (owner_user_id)
 """
 
-pub const CREATE_VERSIONS_TABLE = "CREATE TABLE IF NOT EXISTS versions (id INTEGER PRIMARY KEY AUTOINCREMENT, package_id INTEGER NOT NULL, version TEXT NOT NULL, tag TEXT, \"commit\" TEXT NOT NULL, checksum TEXT NOT NULL, yanked INTEGER NOT NULL DEFAULT 0, downloads INTEGER NOT NULL DEFAULT 0, published_at TEXT NOT NULL, UNIQUE (package_id, version))"
+#const CREATE_VERSIONS_TABLE = "CREATE TABLE IF NOT EXISTS versions (id INTEGER PRIMARY KEY AUTOINCREMENT, package_id INTEGER NOT NULL, version TEXT NOT NULL, tag TEXT, \"commit\" TEXT NOT NULL, checksum TEXT NOT NULL, yanked INTEGER NOT NULL DEFAULT 0, downloads INTEGER NOT NULL DEFAULT 0, published_at TEXT NOT NULL, UNIQUE (package_id, version))"
 
-pub const CREATE_VERSIONS_PACKAGE_INDEX = """
+#const CREATE_VERSIONS_PACKAGE_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_versions_package ON versions (package_id)
 """
 
-pub const CREATE_VERSIONS_PUBLISHED_INDEX = """
+#const CREATE_VERSIONS_PUBLISHED_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_versions_published ON versions (published_at DESC)
 """
 
-pub const CREATE_DEPENDENCIES_TABLE = "CREATE TABLE IF NOT EXISTS dependencies (id INTEGER PRIMARY KEY AUTOINCREMENT, version_id INTEGER NOT NULL, name TEXT NOT NULL, repository TEXT, version_constraint TEXT NOT NULL DEFAULT '*', is_dev INTEGER NOT NULL DEFAULT 0)"
+#const CREATE_DEPENDENCIES_TABLE = "CREATE TABLE IF NOT EXISTS dependencies (id INTEGER PRIMARY KEY AUTOINCREMENT, version_id INTEGER NOT NULL, name TEXT NOT NULL, repository TEXT, version_constraint TEXT NOT NULL DEFAULT '*', is_dev INTEGER NOT NULL DEFAULT 0)"
 
-pub const CREATE_DEPENDENCIES_VERSION_INDEX = """
+#const CREATE_DEPENDENCIES_VERSION_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_deps_version ON dependencies (version_id)
 """
 
-pub const CREATE_API_KEYS_TABLE = """
+#const CREATE_API_KEYS_TABLE = """
 CREATE TABLE IF NOT EXISTS api_keys (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id    INTEGER NOT NULL,
@@ -72,16 +72,16 @@ CREATE TABLE IF NOT EXISTS api_keys (
 )
 """
 
-pub const CREATE_API_KEYS_KEY_HASH_INDEX = """
+#const CREATE_API_KEYS_KEY_HASH_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys (key_hash)
 """
 
-pub const CREATE_API_KEYS_USER_INDEX = """
+#const CREATE_API_KEYS_USER_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys (user_id)
 """
 
 /// Users table for authentication (GitHub OAuth and local admins)
-pub const CREATE_USERS_TABLE = """
+#const CREATE_USERS_TABLE = """
 CREATE TABLE IF NOT EXISTS users (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     github_id         INTEGER UNIQUE,
@@ -103,17 +103,17 @@ CREATE TABLE IF NOT EXISTS users (
 )
 """
 
-pub const CREATE_USERS_GITHUB_INDEX = """
+#const CREATE_USERS_GITHUB_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_users_github_id ON users (github_id)
 """
 
-pub const CREATE_USERS_LOGIN_INDEX = """
+#const CREATE_USERS_LOGIN_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_users_login ON users (login)
 """
 
 /// Full-text search virtual table (SQLite FTS5).
 /// Content is sourced from the packages table.
-pub const CREATE_PACKAGES_FTS = """
+#const CREATE_PACKAGES_FTS = """
 CREATE VIRTUAL TABLE IF NOT EXISTS packages_fts USING fts5 (
     name,
     description,
@@ -124,7 +124,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS packages_fts USING fts5 (
 """
 
 /// Trigger to keep FTS index in sync when packages are inserted.
-pub const CREATE_PACKAGES_FTS_INSERT_TRIGGER = """
+#const CREATE_PACKAGES_FTS_INSERT_TRIGGER = """
 CREATE TRIGGER IF NOT EXISTS packages_fts_insert AFTER INSERT ON packages
 BEGIN
     INSERT INTO packages_fts (rowid, name, description, author)
@@ -133,7 +133,7 @@ END
 """
 
 /// Trigger to keep FTS index in sync when packages are updated.
-pub const CREATE_PACKAGES_FTS_UPDATE_TRIGGER = """
+#const CREATE_PACKAGES_FTS_UPDATE_TRIGGER = """
 CREATE TRIGGER IF NOT EXISTS packages_fts_update AFTER UPDATE ON packages
 BEGIN
     UPDATE packages_fts
@@ -145,7 +145,7 @@ END
 """
 
 /// Trigger to keep FTS index in sync when packages are deleted.
-pub const CREATE_PACKAGES_FTS_DELETE_TRIGGER = """
+#const CREATE_PACKAGES_FTS_DELETE_TRIGGER = """
 CREATE TRIGGER IF NOT EXISTS packages_fts_delete AFTER DELETE ON packages
 BEGIN
     DELETE FROM packages_fts WHERE rowid = OLD.id;
@@ -154,25 +154,25 @@ END
 
 /// All schema creation statements in order.
 /// Execute these sequentially to initialize the database.
-pub const SCHEMA_STATEMENTS = [
-    CREATE_PACKAGES_TABLE,
-    CREATE_PACKAGES_NAME_INDEX,
-    CREATE_PACKAGES_UPDATED_INDEX,
-    CREATE_PACKAGES_DOWNLOADS_INDEX,
-    CREATE_PACKAGES_OWNER_INDEX,
-    CREATE_VERSIONS_TABLE,
-    CREATE_VERSIONS_PACKAGE_INDEX,
-    CREATE_VERSIONS_PUBLISHED_INDEX,
-    CREATE_DEPENDENCIES_TABLE,
-    CREATE_DEPENDENCIES_VERSION_INDEX,
-    CREATE_USERS_TABLE,
-    CREATE_USERS_GITHUB_INDEX,
-    CREATE_USERS_LOGIN_INDEX,
-    CREATE_API_KEYS_TABLE,
-    CREATE_API_KEYS_KEY_HASH_INDEX,
-    CREATE_API_KEYS_USER_INDEX,
-    CREATE_PACKAGES_FTS,
-    CREATE_PACKAGES_FTS_INSERT_TRIGGER,
-    CREATE_PACKAGES_FTS_UPDATE_TRIGGER,
-    CREATE_PACKAGES_FTS_DELETE_TRIGGER
+pub var SCHEMA_STATEMENTS = [
+    #{CREATE_PACKAGES_TABLE},
+    #{CREATE_PACKAGES_NAME_INDEX},
+    #{CREATE_PACKAGES_UPDATED_INDEX},
+    #{CREATE_PACKAGES_DOWNLOADS_INDEX},
+    #{CREATE_PACKAGES_OWNER_INDEX},
+    #{CREATE_VERSIONS_TABLE},
+    #{CREATE_VERSIONS_PACKAGE_INDEX},
+    #{CREATE_VERSIONS_PUBLISHED_INDEX},
+    #{CREATE_DEPENDENCIES_TABLE},
+    #{CREATE_DEPENDENCIES_VERSION_INDEX},
+    #{CREATE_USERS_TABLE},
+    #{CREATE_USERS_GITHUB_INDEX},
+    #{CREATE_USERS_LOGIN_INDEX},
+    #{CREATE_API_KEYS_TABLE},
+    #{CREATE_API_KEYS_KEY_HASH_INDEX},
+    #{CREATE_API_KEYS_USER_INDEX},
+    #{CREATE_PACKAGES_FTS},
+    #{CREATE_PACKAGES_FTS_INSERT_TRIGGER},
+    #{CREATE_PACKAGES_FTS_UPDATE_TRIGGER},
+    #{CREATE_PACKAGES_FTS_DELETE_TRIGGER}
 ]

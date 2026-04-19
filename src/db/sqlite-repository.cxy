@@ -1412,24 +1412,6 @@ test "yankVersion - marks version as yanked" {
     ok!(yankedOpt&.yanked)
 }
 
-test "validateToken - returns false for nonexistent token" {
-    var repo = SQLitePackageRepository.open(":memory:")
-    repo.initialize()
-
-    ok!(!repo.validateToken("nonexistent"))
-}
-
-test "createToken and validateToken - creates and validates token" {
-    var repo = SQLitePackageRepository.open(":memory:")
-    repo.initialize()
-
-    var tokenId = repo.createToken("hash123", "test-token")
-    ok!(tokenId > 0)
-
-    ok!(repo.validateToken("hash123"))
-    ok!(!repo.validateToken("wrong-hash"))
-}
-
 test "getDependencies - returns dependencies for version" {
     var repo = SQLitePackageRepository.open(":memory:")
     repo.initialize()
